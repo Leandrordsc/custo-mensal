@@ -78,10 +78,11 @@ button {
   font-weight: 900;
 }
 
-.atlas-sidebar span {
+.atlas-sidebar button {
   writing-mode: vertical-rl;
   transform: rotate(180deg);
   border-radius: 999px;
+  background: transparent;
   padding: 12px 8px;
   color: var(--muted);
   font-size: 12px;
@@ -176,9 +177,61 @@ button {
 .filter-pill {
   border: 1px solid var(--border);
   border-radius: 18px;
+  background: transparent;
   padding: 14px 16px;
   color: var(--muted);
   font-size: 13px;
+  text-align: left;
+}
+
+.filter-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: transparent;
+  padding: 14px 16px;
+  color: var(--foreground);
+  font-size: 13px;
+  outline: none;
+}
+
+.filter-input::placeholder {
+  color: var(--muted);
+}
+
+.notice-card {
+  margin-bottom: 18px;
+  border: 1px solid rgba(56, 189, 248, .28);
+  border-radius: 20px;
+  background: rgba(56, 189, 248, .10);
+  color: var(--muted);
+  padding: 14px 16px;
+  font-size: 13px;
+}
+
+.tabs-bar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 18px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.tabs-bar button {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--muted);
+  padding: 11px 14px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.tabs-bar .active {
+  border-color: rgba(34, 197, 94, .42);
+  background: rgba(34, 197, 94, .16);
+  color: var(--accent);
 }
 
 .kpi-grid {

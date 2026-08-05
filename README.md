@@ -1,8 +1,8 @@
-# Atlas Financeiro — Controle de Custos
+# Controle de Custos
 
-Módulo web de Controle de Custos criado a partir da lógica da planilha **Custo Mensal.xlsx**.
+Aplicação web de Controle de Custos criada a partir da lógica da planilha **Custo Mensal.xlsx**.
 
-A proposta não é reproduzir a planilha, mas transformar sua estrutura em uma aplicação moderna para o Atlas Financeiro, com dashboard, cartões, orçamentos, lançamentos, gráficos e sinais informativos do Radar Financeiro.
+A proposta não é reproduzir a planilha visualmente, mas transformar sua estrutura em uma aplicação moderna, com dashboard, cartões, orçamentos, lançamentos, gráficos e sinais informativos do Radar Financeiro.
 
 ## Funcionalidades desta versão
 

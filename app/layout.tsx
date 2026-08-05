@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Atlas Financeiro | Controle de Custos",
+  title: "Controle de Custos",
   description:
-    "Módulo moderno para controlar custos, cartões, orçamentos, recorrências e insights informativos.",
+    "Aplicação moderna para controlar custos, cartões, orçamentos, recorrências e insights informativos.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
