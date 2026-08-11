@@ -2,350 +2,209 @@
 
 import { useMemo, useState } from "react";
 
-type Expense = {
-  date: string;
-  desc: string;
-  cat: string;
-  subcat: string;
-  account: string;
-  card: string;
-  value: number;
-  paid: boolean;
-  note: string;
-};
-
-const menu = ["Dashboard", "Lançamentos", "Cartões", "Planejamento", "Relatórios", "Configurações"];
 const months = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-const categories = ["Mercado", "Combustível", "Moradia", "Saúde", "Lazer", "Cartões", "Investimentos", "Reserva", "Outros"];
+const menu = ["Custos", "Investimentos", "Cartões", "FIIS - Dividendos", "Consolidado"];
+const fmt = (value: number) => value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+const pct = (value: number) => value.toLocaleString("pt-BR", { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
-const matrix = {
-  Mercado: [1420, 1560, 1490, 1620, 1580, 1710, 1860, 1920, 1500, 1500, 1500, 1500],
-  Combustível: [620, 580, 640, 610, 590, 720, 680, 760, 650, 650, 650, 650],
-  Moradia: [2550, 2550, 2550, 2620, 2620, 2620, 2620, 2620, 2620, 2620, 2620, 2620],
-  Saúde: [310, 420, 380, 260, 510, 340, 390, 420, 500, 500, 500, 500],
-  Lazer: [720, 650, 810, 590, 780, 620, 710, 690, 800, 800, 800, 800],
-  Cartões: [1840, 1920, 2110, 2050, 2180, 2240, 2310, 2420, 2100, 2100, 2100, 2100],
-  Investimentos: [900, 900, 900, 900, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000],
-  Reserva: [450, 500, 500, 500, 600, 600, 600, 600, 600, 600, 600, 600],
-  Outros: [260, 310, 280, 340, 290, 330, 410, 380, 300, 300, 300, 300],
-} as Record<string, number[]>;
-
-const initialExpenses: Expense[] = [
-  { date: "2026-08-12", desc: "Supermercado Vila", cat: "Mercado", subcat: "Compra mensal", account: "Conta Inter", card: "BTG", value: 486.2, paid: true, note: "Compra da semana" },
-  { date: "2026-08-10", desc: "Aluguel", cat: "Moradia", subcat: "Fixo", account: "Conta Inter", card: "-", value: 2250, paid: true, note: "" },
-  { date: "2026-08-08", desc: "iFood", cat: "Lazer", subcat: "Restaurante", account: "Conta Nubank", card: "Nubank", value: 92.4, paid: false, note: "Fim de semana" },
-  { date: "2026-08-07", desc: "Posto Shell", cat: "Combustível", subcat: "Carro", account: "Conta principal", card: "Mercado Pago", value: 244.9, paid: true, note: "" },
-  { date: "2026-08-05", desc: "Farmácia", cat: "Saúde", subcat: "Medicamentos", account: "Conta Inter", card: "BTG", value: 138.7, paid: true, note: "" },
+const costs = [
+  { item: "Agua", values: [78, 122, 84, 84, 89, 89, 81, 0, 0, 0, 0, 0] },
+  { item: "Luz", values: [215, 214, 204, 139, 211, 217, 236, 0, 0, 0, 0, 0] },
+  { item: "Telefone/Internet", values: [100, 100, 100, 100, 100, 100, 82, 0, 0, 0, 0, 0] },
+  { item: "Cartão Mercado Pago", values: [3970, 3042, 0, 914, 2157, 0, 3071, 0, 0, 0, 0, 0] },
+  { item: "Cartão Nubank", values: [31, 0, 0, 0, 0, 45, 45, 0, 0, 0, 0, 0] },
+  { item: "99 Pay - Cintia Diversão", values: [100, 100, 100, 100, 100, 100, 100, 0, 0, 0, 0, 0] },
+  { item: "FIIS - AÇÕES - RENDA FIXA", values: [2900, 2816, 2400, 5900, 3300, 2600, 1300, 0, 0, 0, 0, 0] },
+  { item: "Reserva de Oportunidade", values: [900, 900, 900, 900, 900, 900, 900, 0, 0, 0, 0, 0] },
+  { item: "Livia - 18 anos", values: [100, 100, 100, 100, 100, 100, 100, 0, 0, 0, 0, 0] },
+  { item: "Manutenção/Seguro/Carro", values: [5123, 400, 2807, 400, 437, 6240, 0, 0, 0, 0, 0, 0] },
+  { item: "Combustivel/Carro", values: [0, 0, 0, 0, 1307, 6400, 0, 0, 0, 0, 0, 0] },
 ];
 
-const cards = [
-  { name: "BTG", limit: 5000, used: 4520, closing: "03", due: "10", cashback: 84.3, boxProfit: 42.8, transferred: 650, pending: 320, invoice: 3980, future: 1240 },
-  { name: "Nubank", limit: 3000, used: 1840, closing: "08", due: "15", cashback: 12.4, boxProfit: 0, transferred: 200, pending: 140, invoice: 1700, future: 620 },
-  { name: "Mercado Pago", limit: 2200, used: 920, closing: "13", due: "20", cashback: 26.7, boxProfit: 18.2, transferred: 120, pending: 80, invoice: 840, future: 310 },
+const investments = [
+  { name: "Caixa", target: 0.3, current: 0.2555, amount: 50736 },
+  { name: "Ações", target: 0.2, current: 0.2103, amount: 41761 },
+  { name: "FIIs", target: 0.25, current: 0.3405, amount: 67616 },
+  { name: "Exterior", target: 0.25, current: 0.1937, amount: 38464 },
 ];
 
-const quickActions = ["Mercado", "Combustível", "Restaurante", "Pix", "Cartão", "Receita"];
-const fmt = (value: number) => value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const equityCurve = [12100, 25200, 44800, 73600, 109500, 148200, 195178];
+
+const cardRows = [
+  { date: "07/07/2026", desc: "Alexa Nossa", value: 399, reserved: true },
+  { date: "07/07/2026", desc: "Alexa Analia", value: 279, reserved: true },
+  { date: "14/07/2026", desc: "Cigarros", value: 150, reserved: true },
+  { date: "16/07/2026", desc: "Pizza", value: 102, reserved: true },
+  { date: "18/07/2026", desc: "Gasolina", value: 254, reserved: true },
+  { date: "26/07/2026", desc: "Compras", value: 468, reserved: true },
+  { date: "30/07/2026", desc: "Estacionamento", value: 25, reserved: true },
+];
+
+const cardYield = [
+  { month: "Jan", box: 19.87, cashback: 0 },
+  { month: "Fev", box: 30.49, cashback: 0 },
+  { month: "Mar", box: 1.89, cashback: 0 },
+  { month: "Jul", box: 0, cashback: 0 },
+];
+
+const dividends = [
+  { ticker: "GGRC11", company: "Zagros Renda Imobiliária", class: "FII Logística", avg: 9.9, qty: 610, now: 9.89, paid: [60.2, 61, 61, 57.95, 61, 61, 61] },
+  { ticker: "RBVA11", company: "Rio Bravo Renda Varejo", class: "FII Renda Urbana", avg: 10.26, qty: 750, now: 8.94, paid: [58.5, 63, 63, 63, 63, 63, 67.5] },
+  { ticker: "GARE11", company: "Guardian Logística", class: "FII Híbrido", avg: 8.89, qty: 825, now: 8.17, paid: [58.1, 58.1, 58.1, 66.4, 66.4, 66.4, 68.47] },
+  { ticker: "HSML11", company: "HSI Malls", class: "FII Shoppings", avg: 89.26, qty: 80, now: 86.6, paid: [52.5, 52.5, 52.5, 56, 56.8, 60, 60] },
+  { ticker: "BRCO11", company: "Bresco Logística", class: "FII Logística", avg: 118.18, qty: 65, now: 114.3, paid: [56.55, 56.55, 59.8, 59.8, 61.75, 61.75, 68.25] },
+  { ticker: "BTLG11", company: "BTG Pactual Logística", class: "FII Logística", avg: 100.94, qty: 70, now: 100.37, paid: [51.35, 52, 56, 56.7, 56.7, 56.7, 56.7] },
+  { ticker: "KNCR11", company: "Kinea Imobiliários", class: "FII Papel", avg: 100.58, qty: 60, now: 107.6, paid: [78, 72, 60, 69, 66, 66, 66] },
+  { ticker: "HFOF11", company: "Hedge Top", class: "FII FOF", avg: 6.9, qty: 900, now: 6.39, paid: [56, 56, 48, 51.12, 51.12, 51.12, 54] },
+  { ticker: "RURA11", company: "Itaú Asset Rural", class: "FIAGRO", avg: 8.2, qty: 800, now: 8.16, paid: [82.5, 90, 90, 96, 90.4, 88, 88] },
+];
 
 export default function Home() {
-  const [active, setActive] = useState("Dashboard");
-  const [search, setSearch] = useState("");
-  const [selectedMonth, setSelectedMonth] = useState("Ago");
+  const [active, setActive] = useState("FIIS - Dividendos");
   const [year, setYear] = useState("2026");
-  const [modalOpen, setModalOpen] = useState(false);
-  const [draftCategory, setDraftCategory] = useState("Mercado");
-  const [notice, setNotice] = useState("Dica: clique em uma célula da grade mensal para abrir os lançamentos daquela categoria e mês.");
-  const [expenses, setExpenses] = useState(initialExpenses);
-
-  const monthIndex = months.indexOf(selectedMonth);
-  const monthExpense = categories.reduce((sum, cat) => sum + matrix[cat][monthIndex], 0);
-  const revenue = 13200;
-  const cardTotal = cards.reduce((sum, card) => sum + card.used, 0);
-  const filtered = useMemo(() => {
-    const term = search.toLowerCase().trim();
-    return expenses.filter((expense) =>
-      !term || Object.values(expense).join(" ").toLowerCase().includes(term),
-    );
-  }, [expenses, search]);
-
-  function openNew(category = "Mercado") {
-    setDraftCategory(category === "Restaurante" ? "Lazer" : category === "Pix" ? "Outros" : category === "Receita" ? "Receita" : category);
-    setModalOpen(true);
-  }
-
-  function saveDraft() {
-    setExpenses((current) => [
-      { date: `${year}-08-15`, desc: "Novo lançamento", cat: draftCategory, subcat: "Rápido", account: "Conta principal", card: draftCategory === "Receita" ? "-" : "BTG", value: 0, paid: false, note: "Criado pelo atalho" },
-      ...current,
-    ]);
-    setModalOpen(false);
-    setActive("Lançamentos");
-    setNotice("Lançamento criado. Edite direto na grade, como em uma planilha.");
-  }
-
-  function openCell(category: string, month: string) {
-    setSelectedMonth(month);
-    setActive("Lançamentos");
-    setSearch(category);
-    setNotice(`Exibindo lançamentos de ${category} em ${month}/${year}.`);
-  }
+  const [search, setSearch] = useState("");
+  const selectedDividends = useMemo(() => dividends.filter((row) => row.ticker.toLowerCase().includes(search.toLowerCase()) || row.company.toLowerCase().includes(search.toLowerCase())), [search]);
 
   return (
     <main className="app-shell">
       <aside className="side-menu">
-        <div className="brand-mark">C</div>
-        {menu.map((item) => (
-          <button key={item} className={active === item ? "active" : ""} onClick={() => setActive(item)}>
-            {item}
-          </button>
-        ))}
+        <div className="brand-mark">CM</div>
+        {menu.map((item) => <button key={item} className={active === item ? "active" : ""} onClick={() => setActive(item)}>{item}</button>)}
       </aside>
-
       <section className="workbench">
         <header className="topbar">
-          <input aria-label="Pesquisar lançamento" placeholder="Pesquisar lançamento..." value={search} onChange={(event) => setSearch(event.target.value)} />
-          <select aria-label="Selecionar mês" value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)}>
-            {months.map((month) => <option key={month}>{month}</option>)}
-          </select>
-          <select aria-label="Selecionar ano" value={year} onChange={(event) => setYear(event.target.value)}>
-            {["2025", "2026", "2027"].map((item) => <option key={item}>{item}</option>)}
-          </select>
-          <button className="primary" onClick={() => openNew()}>+ Novo Lançamento</button>
-          <button onClick={() => setNotice("Importação pronta para mapear as abas da planilha enviada.")}>Importar Excel</button>
-          <button onClick={() => setNotice("Exportação Excel preparada para a grade atual.")}>Exportar Excel</button>
+          <input aria-label="Pesquisar" placeholder="Pesquisar ticker, custo ou lançamento..." value={search} onChange={(event) => setSearch(event.target.value)} />
+          <select aria-label="Ano" value={year} onChange={(event) => setYear(event.target.value)}>{["2020", "2021", "2022", "2023", "2024", "2025", "2026"].map((item) => <option key={item}>{item}</option>)}</select>
+          <button className="primary">Importar Excel</button>
+          <button>Exportar</button>
         </header>
-
-        <div className="notice-card">{notice}</div>
-
-        <section className="quick-actions">
-          {quickActions.map((action) => (
-            <button key={action} onClick={() => openNew(action)}>+ {action}</button>
-          ))}
-        </section>
-
-        {active === "Dashboard" && (
-          <Dashboard
-            selectedMonth={selectedMonth}
-            year={year}
-            revenue={revenue}
-            monthExpense={monthExpense}
-            cardTotal={cardTotal}
-            openCell={openCell}
-          />
-        )}
-        {active === "Lançamentos" && <LaunchTable expenses={filtered} setExpenses={setExpenses} openNew={openNew} />}
+        <Hero year={year} />
+        {active === "Custos" && <CostsView year={year} />}
+        {active === "Investimentos" && <InvestmentsView />}
         {active === "Cartões" && <CardsView />}
-        {active === "Planejamento" && <Planning openCell={openCell} />}
-        {active === "Relatórios" && <Reports />}
-        {active === "Configurações" && <Settings />}
+        {active === "FIIS - Dividendos" && <DividendsView rows={selectedDividends} />}
+        {active === "Consolidado" && <ConsolidatedView />}
       </section>
-
-      {modalOpen && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Novo lançamento">
-          <form className="quick-modal" onSubmit={(event) => { event.preventDefault(); saveDraft(); }}>
-            <div className="modal-head">
-              <div>
-                <p className="eyebrow">Cadastro rápido</p>
-                <h2>Novo lançamento</h2>
-              </div>
-              <button type="button" onClick={() => setModalOpen(false)}>×</button>
-            </div>
-            <label>Descrição<input defaultValue="Novo lançamento" /></label>
-            <label>Categoria<select value={draftCategory} onChange={(event) => setDraftCategory(event.target.value)}>{[...categories, "Receita"].map((cat) => <option key={cat}>{cat}</option>)}</select></label>
-            <label>Subcategoria<input defaultValue="Rápido" /></label>
-            <label>Conta<input defaultValue="Conta principal" /></label>
-            <label>Cartão<select defaultValue="BTG"><option>BTG</option><option>Nubank</option><option>Mercado Pago</option><option>-</option></select></label>
-            <label>Valor<input type="number" defaultValue="0" /></label>
-            <label>Data<input type="date" defaultValue="2026-08-15" /></label>
-            <label className="check-row"><input type="checkbox" /> Pago?</label>
-            <div className="modal-actions">
-              <button type="button" onClick={() => setModalOpen(false)}>Cancelar</button>
-              <button className="primary" type="submit">Salvar</button>
-            </div>
-          </form>
-        </div>
-      )}
     </main>
   );
 }
 
-function Dashboard({ selectedMonth, year, revenue, monthExpense, cardTotal, openCell }: {
-  selectedMonth: string;
-  year: string;
-  revenue: number;
-  monthExpense: number;
-  cardTotal: number;
-  openCell: (category: string, month: string) => void;
-}) {
+function Hero({ year }: { year: string }) {
+  const totalDividends = dividends.reduce((sum, row) => sum + row.paid.reduce((a, b) => a + b, 0), 0);
+  const invested = dividends.reduce((sum, row) => sum + row.avg * row.qty, 0);
+  return (
+    <section className="overview">
+      <div><p className="eyebrow">Controle financeiro pessoal</p><h1>Custo Mensal {year}</h1><span>Baseado nas abas reais da planilha: custos, investimentos, cartões, dividendos e consolidado.</span></div>
+      <Kpi title="Patrimônio total" value={fmt(195178)} tone="blue" />
+      <Kpi title="Dividendos 2026" value={fmt(totalDividends)} tone="green" />
+      <Kpi title="Yield carteira" value={pct(totalDividends / invested)} tone="amber" />
+      <Kpi title="Meta mensal" value={`${fmt(totalDividends / 7)} / ${fmt(300)}`} tone="violet" />
+    </section>
+  );
+}
+
+function Kpi({ title, value, tone = "neutral" }: { title: string; value: string; tone?: string }) {
+  return <article className={`kpi ${tone}`}><span>{title}</span><strong>{value}</strong></article>;
+}
+
+function CostsView({ year }: { year: string }) {
+  const totals = months.map((_, index) => costs.reduce((sum, row) => sum + row.values[index], 0));
+  const max = Math.max(...totals);
   return (
     <>
-      <section className="monthly-panel">
-        <div>
-          <p className="eyebrow">Painel mensal</p>
-          <h1>{selectedMonth}/{year}</h1>
-        </div>
-        <div className="compact-kpis">
-          <Kpi title="Receitas" value={fmt(revenue)} />
-          <Kpi title="Despesas" value={fmt(monthExpense)} />
-          <Kpi title="Saldo" value={fmt(revenue - monthExpense)} />
-          <Kpi title="Economia" value={fmt(1000)} />
-          <Kpi title="Cartões" value={fmt(cardTotal)} />
-        </div>
-        <div className="due-card">
-          <strong>Próximos vencimentos</strong>
-          <span>BTG em 3 dias · Nubank em 8 dias</span>
-        </div>
-        <div className="due-card">
-          <strong>Resumo dos cartões</strong>
-          <span>{cards.map((card) => `${card.name}: ${Math.round((card.used / card.limit) * 100)}%`).join(" · ")}</span>
-        </div>
-      </section>
-      <MonthlyGrid openCell={openCell} />
-      <section className="dashboard-grid">
-        <CategoryChart />
-        <MonthlyEvolution />
+      <section className="section-head"><div><p className="eyebrow">Aba Custos</p><h2>Onde o dinheiro está escoando</h2></div><span>Matriz anual de despesas por item, com totais e picos visíveis.</span></section>
+      <article className="panel">
+        <div className="chart-head"><h3>Total mensal {year}</h3><strong>{fmt(totals.reduce((a, b) => a + b, 0))}</strong></div>
+        <div className="month-bars labeled">{months.map((month, index) => <div key={month}><i style={{ height: `${Math.max(6, (totals[index] / max) * 100)}%` }} /><span>{month}</span><b>{fmt(totals[index])}</b></div>)}</div>
+      </article>
+      <MatrixTable rows={costs.map((row) => ({ label: row.item, values: row.values }))} totals={totals} />
+    </>
+  );
+}
+
+function InvestmentsView() {
+  const total = investments.reduce((sum, item) => sum + item.amount, 0);
+  return (
+    <>
+      <section className="section-head"><div><p className="eyebrow">Aba Investimentos</p><h2>Histórico, posição atual e evolução patrimonial</h2></div><span>Acompanha onde o dinheiro está alocado, quanto tem no total e como evoluiu.</span></section>
+      <section className="split">
+        <article className="panel"><div className="chart-head"><h3>Evolução patrimonial</h3><strong>{fmt(total)}</strong></div><LineChart values={equityCurve} /></article>
+        <article className="panel"><div className="chart-head"><h3>Alocação CAFE</h3><strong>{fmt(total)}</strong></div><Allocation /></article>
       </section>
     </>
   );
 }
 
-function Kpi({ title, value }: { title: string; value: string }) {
-  return <article className="small-kpi"><span>{title}</span><strong>{value}</strong></article>;
-}
-
-function MonthlyGrid({ openCell }: { openCell: (category: string, month: string) => void }) {
-  const totals = months.map((_, index) => categories.reduce((sum, cat) => sum + matrix[cat][index], 0));
-  return (
-    <article className="sheet-panel">
-      <div className="sheet-title"><h2>Grade mensal por categoria</h2><span>Clique em qualquer célula</span></div>
-      <div className="sheet-scroll">
-        <table className="sheet-table">
-          <thead><tr><th>Categoria</th>{months.map((month) => <th key={month}>{month}</th>)}</tr></thead>
-          <tbody>
-            {categories.map((cat) => (
-              <tr key={cat}>
-                <th>{cat}</th>
-                {months.map((month, index) => (
-                  <td key={month}><button onClick={() => openCell(cat, month)}>{fmt(matrix[cat][index])}</button></td>
-                ))}
-              </tr>
-            ))}
-            <tr className="total-row"><th>Total do mês</th>{totals.map((total, index) => <td key={months[index]}>{fmt(total)}</td>)}</tr>
-          </tbody>
-        </table>
-      </div>
-    </article>
-  );
-}
-
-function LaunchTable({ expenses, setExpenses, openNew }: {
-  expenses: Expense[];
-  setExpenses: React.Dispatch<React.SetStateAction<Expense[]>>;
-  openNew: (category?: string) => void;
-}) {
-  function update(index: number, field: keyof Expense, value: string | boolean) {
-    setExpenses((current) => current.map((item, itemIndex) =>
-      itemIndex === index ? { ...item, [field]: field === "value" ? Number(value) : value } : item,
-    ));
-  }
-
-  return (
-    <article className="sheet-panel">
-      <div className="sheet-title"><h2>Lançamentos</h2><button className="primary" onClick={() => openNew()}>+ Novo</button></div>
-      <div className="sheet-scroll">
-        <table className="sheet-table editable">
-          <thead><tr>{["Data", "Descrição", "Categoria", "Subcategoria", "Conta", "Cartão", "Valor", "Pago", "Observação"].map((head) => <th key={head}>{head}</th>)}</tr></thead>
-          <tbody>
-            {expenses.map((expense, index) => (
-              <tr key={`${expense.desc}-${index}`}>
-                <td><input value={expense.date} onChange={(e) => update(index, "date", e.target.value)} /></td>
-                <td><input value={expense.desc} onChange={(e) => update(index, "desc", e.target.value)} /></td>
-                <td><input value={expense.cat} onChange={(e) => update(index, "cat", e.target.value)} /></td>
-                <td><input value={expense.subcat} onChange={(e) => update(index, "subcat", e.target.value)} /></td>
-                <td><input value={expense.account} onChange={(e) => update(index, "account", e.target.value)} /></td>
-                <td><input value={expense.card} onChange={(e) => update(index, "card", e.target.value)} /></td>
-                <td><input type="number" value={expense.value} onChange={(e) => update(index, "value", e.target.value)} /></td>
-                <td><input type="checkbox" checked={expense.paid} onChange={(e) => update(index, "paid", e.target.checked)} /></td>
-                <td><input value={expense.note} onChange={(e) => update(index, "note", e.target.value)} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </article>
-  );
-}
-
 function CardsView() {
+  const invoice = cardRows.reduce((sum, row) => sum + row.value, 0);
+  const reserved = cardRows.filter((row) => row.reserved).reduce((sum, row) => sum + row.value, 0);
+  const earnings = cardYield.reduce((sum, row) => sum + row.box + row.cashback, 0);
   return (
-    <section className="cards-grid">
-      {cards.map((card) => (
-        <article className="credit-card" key={card.name}>
-          <div className="card-header"><h2>{card.name}</h2><span>Vence dia {card.due}</span></div>
-          <div className="limit-bar"><i style={{ width: `${Math.round((card.used / card.limit) * 100)}%` }} /></div>
-          <div className="card-metrics">
-            <Kpi title="Limite" value={fmt(card.limit)} />
-            <Kpi title="Utilizado" value={fmt(card.used)} />
-            <Kpi title="Disponível" value={fmt(card.limit - card.used)} />
-            <Kpi title="Fechamento" value={`Dia ${card.closing}`} />
-            <Kpi title="Cashback" value={fmt(card.cashback)} />
-            <Kpi title="Lucro caixinha" value={fmt(card.boxProfit)} />
-            <Kpi title="Transferido" value={fmt(card.transferred)} />
-            <Kpi title="Pendente" value={fmt(card.pending)} />
-            <Kpi title="Fatura prevista" value={fmt(card.invoice)} />
-            <Kpi title="Parcelas futuras" value={fmt(card.future)} />
-          </div>
-        </article>
-      ))}
-    </section>
+    <>
+      <section className="section-head"><div><p className="eyebrow">Aba Cartão</p><h2>Fatura, caixinha, cashback e lucro do mês</h2></div><span>Compra no cartão, dinheiro reservado na caixinha e ganho consolidado.</span></section>
+      <section className="kpi-grid"><Kpi title="Total da fatura" value={fmt(invoice)} /><Kpi title="Valor reservado" value={fmt(reserved)} tone="green" /><Kpi title="Falta transferir" value={fmt(invoice - reserved)} tone="amber" /><Kpi title="Rendimento + cashback" value={fmt(earnings)} tone="blue" /></section>
+      <section className="split">
+        <DataTable headers={["Data", "Descrição", "Valor", "Transferido"]} rows={cardRows.map((row) => [row.date, row.desc, fmt(row.value), row.reserved ? "Sim" : "Não"])} />
+        <DataTable headers={["Mês", "Rendimento", "Cashback", "Total"]} rows={cardYield.map((row) => [row.month, fmt(row.box), fmt(row.cashback), fmt(row.box + row.cashback)])} />
+      </section>
+    </>
   );
 }
 
-function Planning({ openCell }: { openCell: (category: string, month: string) => void }) {
+function DividendsView({ rows }: { rows: typeof dividends }) {
+  const monthly = months.slice(0, 7).map((_, index) => rows.reduce((sum, row) => sum + row.paid[index], 0));
+  const totalPaid = monthly.reduce((a, b) => a + b, 0);
+  const invested = rows.reduce((sum, row) => sum + row.avg * row.qty, 0);
+  const market = rows.reduce((sum, row) => sum + row.now * row.qty, 0);
   return (
-    <article className="sheet-panel">
-      <div className="sheet-title"><h2>Planejamento anual</h2><span>Total anual · média mensal · comparação com ano anterior</span></div>
-      <div className="sheet-scroll">
-        <table className="sheet-table editable">
-          <thead><tr><th>Categoria</th>{months.map((month) => <th key={month}>{month}</th>)}<th>Total anual</th><th>Média</th><th>Vs ano anterior</th></tr></thead>
-          <tbody>
-            {categories.map((cat) => {
-              const annual = matrix[cat].reduce((sum, value) => sum + value, 0);
-              return (
-                <tr key={cat}>
-                  <th>{cat}</th>
-                  {months.map((month, index) => <td key={month}><button onClick={() => openCell(cat, month)}>{fmt(matrix[cat][index])}</button></td>)}
-                  <td>{fmt(annual)}</td>
-                  <td>{fmt(annual / 12)}</td>
-                  <td>{cat.length % 2 ? "+6%" : "-3%"}</td>
-                </tr>
-              );
-            })}
-          </tbody>
+    <>
+      <section className="section-head"><div><p className="eyebrow">Aba mais importante</p><h2>FIIS, dividendos, cupons e proventos</h2></div><span>Ticker por ticker, preço médio, preço atual, recebido mês a mês, ano e yield.</span></section>
+      <section className="kpi-grid"><Kpi title="Recebido no ano" value={fmt(totalPaid)} tone="green" /><Kpi title="Média mensal" value={fmt(totalPaid / 7)} /><Kpi title="Custo da carteira" value={fmt(invested)} /><Kpi title="Valor hoje" value={fmt(market)} tone="blue" /><Kpi title="Dividend yield" value={pct(totalPaid / invested)} tone="amber" /></section>
+      <section className="split wide-left">
+        <article className="panel"><div className="chart-head"><h3>Recebimento mensal</h3><strong>{fmt(totalPaid)}</strong></div><div className="month-bars">{monthly.map((value, index) => <div key={months[index]}><i style={{ height: `${Math.max(10, value / 8)}%` }} /><span>{months[index]}</span><b>{fmt(value)}</b></div>)}</div></article>
+        <article className="panel"><div className="chart-head"><h3>Por classe</h3><strong>FIIs · Ações · REITs · ETFs</strong></div><ClassBars /></article>
+      </section>
+      <article className="table-panel">
+        <table className="data-table">
+          <thead><tr>{["Ticker", "Tipo", "Preço médio", "Qtd", "Valor hoje", "Recebido ano", "DY custo"].map((head) => <th key={head}>{head}</th>)}</tr></thead>
+          <tbody>{rows.map((row) => {
+            const paid = row.paid.reduce((a, b) => a + b, 0);
+            return <tr key={row.ticker}><th>{row.ticker}<span>{row.company}</span></th><td>{row.class}</td><td>{fmt(row.avg)}</td><td>{row.qty}</td><td>{fmt(row.now * row.qty)}</td><td>{fmt(paid)}</td><td>{pct(paid / (row.avg * row.qty))}</td></tr>;
+          })}</tbody>
         </table>
-      </div>
-    </article>
+      </article>
+    </>
   );
 }
 
-function Reports() {
+function ConsolidatedView() {
   return (
-    <section className="dashboard-grid">
-      <CategoryChart />
-      <MonthlyEvolution />
-      <article className="panel col-span-12"><p className="eyebrow">Alertas inteligentes</p><h2>Informativos</h2><div className="alert-list"><p>Mercado consumiu 82% do orçamento.</p><p>BTG atingiu 90% do limite.</p><p>Combustível acima da média dos últimos seis meses.</p><p>Próximo vencimento em três dias.</p></div></article>
-    </section>
+    <>
+      <section className="section-head"><div><p className="eyebrow">Aba Consolidado</p><h2>Metas e composição CAFE</h2></div><span>Meta de dividendos, 100k investidos e 25% em ativos internacionais.</span></section>
+      <section className="kpi-grid"><Kpi title="Meta dividendos" value={`${fmt(236)} / ${fmt(300)}`} tone="green" /><Kpi title="Meta patrimônio" value={`${fmt(195178)} / ${fmt(100000)}`} tone="blue" /><Kpi title="Exterior atual" value={pct(0.1937)} tone="amber" /><Kpi title="Aporte mensal" value={fmt(3400)} /></section>
+      <article className="panel"><Allocation /></article>
+    </>
   );
 }
 
-function Settings() {
-  return <article className="panel col-span-12"><p className="eyebrow">Configurações</p><h2>Mapeamento da planilha</h2><p className="muted">Área reservada para categorias, subcategorias, contas, cartões e importação das abas originais.</p></article>;
+function MatrixTable({ rows, totals }: { rows: { label: string; values: number[] }[]; totals: number[] }) {
+  return <article className="table-panel"><table className="data-table matrix"><thead><tr><th>Despesa</th>{months.map((month) => <th key={month}>{month}</th>)}<th>Total</th></tr></thead><tbody>{rows.map((row) => <tr key={row.label}><th>{row.label}</th>{row.values.map((value, index) => <td key={months[index]} className={value > 3000 ? "hot" : ""}>{value ? fmt(value) : "-"}</td>)}<td>{fmt(row.values.reduce((a, b) => a + b, 0))}</td></tr>)}<tr className="total-row"><th>Total</th>{totals.map((value, index) => <td key={months[index]}>{value ? fmt(value) : "-"}</td>)}<td>{fmt(totals.reduce((a, b) => a + b, 0))}</td></tr></tbody></table></article>;
 }
 
-function CategoryChart() {
-  return <article className="panel col-span-6"><p className="eyebrow">Gráfico</p><h2>Gastos por categoria</h2><div className="simple-bars">{categories.slice(0, 6).map((cat) => <div key={cat}><span>{cat}</span><i style={{ width: `${Math.min(100, matrix[cat][7] / 25)}%` }} /></div>)}</div></article>;
+function DataTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
+  return <article className="table-panel"><table className="data-table"><thead><tr>{headers.map((head) => <th key={head}>{head}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={index}>{row.map((cell, cellIndex) => cellIndex ? <td key={cell}>{cell}</td> : <th key={cell}>{cell}</th>)}</tr>)}</tbody></table></article>;
 }
 
-function MonthlyEvolution() {
-  return <article className="panel col-span-6"><p className="eyebrow">Gráfico</p><h2>Evolução mensal</h2><div className="bars">{months.map((month, index) => <i key={month} title={month} style={{ height: `${45 + (index % 5) * 10}%` }} />)}</div></article>;
+function LineChart({ values }: { values: number[] }) {
+  const max = Math.max(...values);
+  return <div className="line-chart">{values.map((value, index) => <i key={index} style={{ height: `${(value / max) * 100}%` }}><span>{fmt(value)}</span></i>)}</div>;
+}
+
+function Allocation() {
+  return <div className="allocation">{investments.map((item) => <div key={item.name}><strong>{item.name}</strong><span>{fmt(item.amount)}</span><i><b style={{ width: `${item.current * 100}%` }} /></i><small>Atual {pct(item.current)} · Ideal {pct(item.target)}</small></div>)}</div>;
+}
+
+function ClassBars() {
+  const data = [{ name: "FIIs", value: 86 }, { name: "Ações", value: 8 }, { name: "REITs", value: 4 }, { name: "ETFs", value: 2 }];
+  return <div className="simple-bars">{data.map((item) => <div key={item.name}><span>{item.name}</span><i style={{ width: `${item.value}%` }} /><b>{item.value}%</b></div>)}</div>;
 }
