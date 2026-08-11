@@ -41,3 +41,5 @@ yarn-error.log*
 /work/
 /sites-package-stage/
 *.tar.gz
+referencias/*.xlsx
+/_bmad-output/import-staging/*.json

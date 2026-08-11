@@ -1,11 +1,8 @@
 import assert from "node:assert/strict";
-import { access, readFile, readdir } from "node:fs/promises";
 import test from "node:test";
-
-const developmentPreviewMeta =
-  /<meta(?=[^>]*\bname=["']codex-preview["'])(?=[^>]*\bcontent=["']development["'])[^>]*>/i;
-const templateRoot = new URL("../", import.meta.url);
-const previewRoot = new URL("../app/_sites-preview/", import.meta.url);
+import { annualCostSheets, dividendTotals, getYearSheet, monthlyTotals, sum } from "../lib/finance-data.ts";
+import { resolveAssetPrice } from "../lib/price-service.ts";
+import { buildStaging } from "../scripts/import-custo-mensal.mjs";
 
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -20,6 +17,13 @@ async function render() {
       ASSETS: {
         fetch: async () => new Response("Not found", { status: 404 }),
       },
+      IMAGES: {
+        input: () => ({
+          transform: () => ({
+            output: async () => ({ response: () => new Response("not used") }),
+          }),
+        }),
+      },
     },
     {
       waitUntil() {},
@@ -28,64 +32,72 @@ async function render() {
   );
 }
 
-test("server-renders the starter loading skeleton", async () => {
+test("preserva totais historicos anuais importados da planilha", () => {
+  const expected = new Map([
+    [2021, 38325.98],
+    [2022, 58227.49],
+    [2023, 61568.02],
+    [2024, 60104.63],
+    [2025, 77275.47],
+    [2026, 48382.76],
+  ]);
+
+  for (const sheet of annualCostSheets.filter((item) => expected.has(item.year))) {
+    assert.equal(Number(sum(monthlyTotals(sheet.rows)).toFixed(2)), expected.get(sheet.year));
+  }
+});
+
+test("separa aportes e reservas do total operacional de custos", () => {
+  const sheet2026 = getYearSheet(2026);
+  const originalTotal = sum(monthlyTotals(sheet2026.rows));
+  const expenseTotal = sum(monthlyTotals(sheet2026.rows, "expenses"));
+
+  assert.equal(Number(originalTotal.toFixed(2)), 48382.76);
+  assert.equal(Number(expenseTotal.toFixed(2)), 24216.76);
+  assert.ok(originalTotal > expenseTotal);
+});
+
+test("calcula carteira de FIIs e dividendos sem depender da aba FisWebDriver", () => {
+  const totals = dividendTotals();
+
+  assert.equal(Number(totals.totalPaid.toFixed(2)), 3386.36);
+  assert.equal(Number(totals.invested.toFixed(2)), 61572.45);
+  assert.equal(Number(totals.market.toFixed(2)), 59533.20);
+});
+
+test("usa ultimo preco conhecido quando a API de cotacao falha", async () => {
+  const price = await resolveAssetPrice("MXRF11", {
+    async getPrice() {
+      throw new Error("provider indisponivel");
+    },
+  });
+
+  assert.equal(price.price, 9.69);
+  assert.equal(price.stale, true);
+  assert.equal(price.provider, "FisWebDriver importado");
+});
+
+test("gera staging de importacao com contrato esperado", () => {
+  const staging = buildStaging();
+
+  assert.equal(staging.monthlyExpenses.length, 288);
+  assert.equal(staging.dividendPayments.length, 108);
+  assert.equal(staging.importIssues.length, 4);
+  assert.deepEqual(Object.keys(staging.monthlyExpenses[0]).sort(), ["amount", "classification", "month", "sourceCell", "sourceLabel", "sourceSheet", "year"].sort());
+  assert.equal(staging.monthlyExpenses[0].month, 1);
+  assert.equal(staging.monthlyExpenses.at(-1).month, 12);
+  assert.ok(staging.dividendPayments.every((payment) => payment.ticker && payment.sourceSheet === "FIIS - Dividendos"));
+});
+
+test("server-renders a aplicacao financeira atual", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, developmentPreviewMeta);
-  assert.match(html, /<title>Your site is taking shape<\/title>/i);
-  assert.match(html, /Building your site/);
-  assert.match(html, /Your site is taking shape/);
-  assert.match(
-    html,
-    /Your first version will appear here automatically when it’s ready\./,
-  );
-  assert.doesNotMatch(html, /Codex/);
-  assert.match(html, /react-loading-skeleton/);
-  assert.match(html, /role="status"/);
-});
-
-test("keeps the loading skeleton scoped and disposable", async () => {
-  const [preview, css, page, layout, packageJson, files] = await Promise.all([
-    readFile(new URL("SkeletonPreview.tsx", previewRoot), "utf8"),
-    readFile(new URL("preview.css", previewRoot), "utf8"),
-    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../package.json", import.meta.url), "utf8"),
-    readdir(previewRoot),
-  ]);
-
-  assert.deepEqual(files.sort(), ["SkeletonPreview.tsx", "preview.css"]);
-  assert.match(preview, /from "react-loading-skeleton"/);
-  assert.match(preview, /baseColor="#eceae7"/);
-  assert.match(preview, /highlightColor="#f9f8f6"/);
-  assert.match(preview, /duration=\{2\.8\}/);
-  assert.match(preview, /sites-skeleton-search-placeholder/);
-  assert.match(packageJson, /"react-loading-skeleton": "3\.5\.0"/);
-
-  const shellIndex = preview.indexOf('className="sites-skeleton-shell"');
-  const statusIndex = preview.indexOf('className="sites-skeleton-status"');
-  assert.ok(shellIndex >= 0 && statusIndex > shellIndex);
-  assert.match(css, /position:\s*fixed/);
-  assert.match(css, /inset:\s*0/);
-  assert.match(css, /opacity:\s*0\.52/);
-  assert.match(css, /prefers-reduced-motion:\s*reduce/);
-  assert.doesNotMatch(css, /#020617|canvas|pets|progress/i);
-  assert.doesNotMatch(
-    preview,
-    /loading-spinner|status-mark|status-progress|canvas|cookie|random/i,
-  );
-
-  assert.match(page, /export const metadata:\s*Metadata/);
-  assert.match(page, /"codex-preview": "development"/);
-  assert.match(page, /<SkeletonPreview \/>/);
-  assert.match(layout, /title:\s*"Starter Project"/);
-  assert.doesNotMatch(layout, /codex-preview|_sites-preview|themeColor|\bViewport\b/);
-  assert.doesNotMatch(css, /(^|\s)(html|body)\s*\{/m);
-
-  await assert.rejects(
-    access(new URL("public/_sites-preview", templateRoot)),
-  );
+  assert.match(html, /Controle de Custos/);
+  assert.match(html, /Custo Mensal[\s\S]*2026/);
+  assert.match(html, /Dashboard/);
+  assert.match(html, /Dividendos 2026/);
+  assert.doesNotMatch(html, /Your site is taking shape|Building your site/);
 });
