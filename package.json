@@ -10,8 +10,10 @@
     "build": "vinext build",
     "start": "vinext start",
     "test": "npm run build && node --test tests/rendered-html.test.mjs",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "db:generate": "drizzle-kit generate"
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern _bmad/render",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "node scripts/ensure-local-db.mjs && drizzle-kit migrate",
+    "db:verify": "node --test tests/local-db-schema.test.mjs"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
@@ -21,6 +23,7 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
     "@eslint/js": "9.39.4",
+    "@libsql/client": "^0.17.4",
     "@next/eslint-plugin-next": "16.2.6",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
