@@ -99,7 +99,7 @@ Runner local de migrations:
 - O piloto usa `scripts/migrate-local.mjs` para SQLite local.
 - O runner abre conexao local, controla `PRAGMA foreign_keys` fora da transacao, executa cada migration pendente com `BEGIN IMMEDIATE`, registra em `__drizzle_migrations` apenas apos sucesso e executa `PRAGMA foreign_key_check` ao final.
 - Em falha intermediaria, o runner executa `ROLLBACK`, restaura/verifica `PRAGMA foreign_keys = ON` e nao registra a migration como aplicada.
-- Enquanto a Etapa 1 ainda nao estiver commitada, o runner permite reaplicar atomicamente a ultima migration ja registrada se o hash dela mudou; migrations anteriores com hash alterado devem falhar para evitar reescrita perigosa de historico.
+- Se uma migration ja registrada tiver hash diferente do arquivo atual, o runner interrompe imediatamente com erro explicito antes de executar qualquer SQL. Migrations commitadas sao imutaveis; mudancas futuras devem gerar nova migration numerada.
 - Essa garantia foi validada para SQLite local. Nao declarar compatibilidade com D1 sem teste especifico em ambiente D1/Wrangler.
 
 ## Cloudflare D1 como candidato de producao
