@@ -65,6 +65,27 @@ http://localhost:3000
 npm run build
 ```
 
+## SQLite local
+
+O piloto local usa SQLite fisico com migrations Drizzle versionadas. O caminho do banco deve ser configurado por variavel de ambiente, sem credenciais no repositorio.
+
+Use `.env.example` como referencia:
+
+```env
+LOCAL_DATABASE_PATH=./data/custo-mensal.local.sqlite
+```
+
+O comando `db:migrate` usa o runner local `scripts/migrate-local.mjs`, que aplica cada migration pendente com transacao explicita, registra em `__drizzle_migrations` somente apos sucesso e restaura `PRAGMA foreign_keys = ON`.
+
+No Windows PowerShell, se a politica de execucao bloquear `npm.ps1`, use `npm.cmd`:
+
+```powershell
+npm.cmd run db:migrate
+npm.cmd run db:verify
+```
+
+O banco local, o diretorio `data/`, arquivos `.env` e planilhas em `referencias/*.xlsx` devem permanecer fora do Git.
+
 ## Estrutura principal
 
 - `app/page.tsx`: página principal do módulo de Controle de Custos.
