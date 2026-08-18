@@ -145,6 +145,8 @@ export const transactions = sqliteTable(
     voidedBy: text("voided_by").references(() => users.id),
     reversalTransactionId: text("reversal_transaction_id"),
     notes: text("notes"),
+    createdAt: text("created_at").notNull().default("1970-01-01T00:00:00.000Z"),
+    updatedAt: text("updated_at").notNull().default("1970-01-01T00:00:00.000Z"),
   },
   (table) => ({
     userIdIdx: uniqueIndex("transactions_user_id_idx").on(table.userId, table.id),

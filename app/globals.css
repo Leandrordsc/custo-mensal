@@ -333,6 +333,126 @@ h3 { font-size: 16px; }
   font-weight: 900;
 }
 
+.costs-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.costs-toolbar select, .costs-toolbar button, .expense-form input, .expense-form select {
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--foreground);
+  padding: 8px 10px;
+}
+.expense-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+.expense-form label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+.money-input {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  min-height: 38px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+}
+.money-input b {
+  padding-left: 10px;
+  color: var(--muted);
+}
+.expense-form .money-input input {
+  min-height: 36px;
+  border: 0;
+  background: transparent;
+}
+.expense-form .full-row, .form-actions {
+  grid-column: 1 / -1;
+}
+.checkbox-row {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  justify-content: start;
+}
+.checkbox-row input {
+  min-height: auto;
+}
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.form-actions button, .row-actions button {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--foreground);
+  padding: 8px 10px;
+  font-weight: 800;
+}
+.form-actions .primary {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: #fff;
+}
+.error-banner {
+  border: 1px solid color-mix(in srgb, var(--red) 45%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--red) 10%, var(--panel));
+  color: var(--red);
+  padding: 10px 12px;
+  font-weight: 800;
+}
+.empty-state {
+  margin: 0;
+  color: var(--muted);
+}
+.status-badge {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+.status-badge.confirmado {
+  background: color-mix(in srgb, var(--green) 14%, var(--panel));
+  color: var(--green);
+}
+.status-badge.pendente_revisao {
+  background: color-mix(in srgb, var(--amber) 14%, var(--panel));
+  color: var(--amber);
+}
+.status-badge.cancelado {
+  background: color-mix(in srgb, var(--red) 12%, var(--panel));
+  color: var(--red);
+}
+.muted-row {
+  opacity: .62;
+}
+.row-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.row-actions button:disabled, .form-actions button:disabled {
+  cursor: not-allowed;
+  opacity: .5;
+}
+
 @media (max-width: 760px) {
   h1 { font-size: 24px; }
   .month-bars, .month-bars.labeled { overflow-x: auto; }

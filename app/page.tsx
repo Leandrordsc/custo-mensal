@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import { allocation, annualCostSheets, cardRows, cardYield, dividends, dividendTotals, getYearSheet, hasDetailedExpenseRows, importIssues, monthlyTotals, months, sum } from "@/lib/finance-data";
 
 const menu = ["Dashboard", "Custos", "Cartões", "Investimentos", "FIIS - Dividendos"];
@@ -10,6 +11,66 @@ const fmtDate = (value: string) => {
   const date = new Date(`${value}T00:00:00`);
   return Number.isNaN(date.getTime()) ? "-" : date.toLocaleDateString("pt-BR");
 };
+const localApiBaseUrl = "http://127.0.0.1:3001";
+const monthOptions = months.map((month, index) => ({ label: month, value: index + 1 }));
+
+type BaseOption = { id: string; name: string; status?: string };
+type ExpenseRecord = {
+  id: string;
+  date: string;
+  competenceMonth: string;
+  description: string;
+  amountCents: number;
+  categoryId: string | null;
+  categoryName: string | null;
+  paymentMethod: "CONTA" | "CARTAO";
+  accountId: string | null;
+  accountName: string | null;
+  cardId: string | null;
+  cardName: string | null;
+  classificationStatus: string;
+  transactionStatus: string;
+  notes: string | null;
+  voidedAt: string | null;
+  installmentNumber: number | null;
+  totalInstallments: number | null;
+};
+type ExpenseSummary = {
+  totalConfirmedCents: number;
+  totalCardCents: number;
+  totalPendingCents: number;
+  count: number;
+  byCategory: { category: string; amountCents: number }[];
+};
+type ExpenseFormState = {
+  description: string;
+  amount: string;
+  date: string;
+  competenceMonth: string;
+  categoryId: string;
+  paymentMethod: "CONTA" | "CARTAO";
+  accountId: string;
+  cardId: string;
+  notes: string;
+  classificationStatus: "CONFIRMADO" | "PENDENTE_REVISAO";
+  isInstallment: boolean;
+  installments: number;
+};
+
+const emptyExpenseForm = (year: string, month: number): ExpenseFormState => ({
+  description: "",
+  amount: "",
+  date: `${year}-${String(month).padStart(2, "0")}-01`,
+  competenceMonth: `${year}-${String(month).padStart(2, "0")}`,
+  categoryId: "",
+  paymentMethod: "CONTA",
+  accountId: "",
+  cardId: "",
+  notes: "",
+  classificationStatus: "CONFIRMADO",
+  isInstallment: false,
+  installments: 1,
+});
 
 export default function Home() {
   const [active, setActive] = useState("Dashboard");
@@ -59,6 +120,18 @@ function Kpi({ title, value, tone = "neutral" }: { title: string; value: string;
   return <article className={`kpi ${tone}`}><span>{title}</span><strong>{value}</strong></article>;
 }
 
+async function readJson(response: Response) {
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(typeof body.error === "string" ? body.error : "Erro na API local.");
+  }
+  return body;
+}
+
+function centsToInput(value: number) {
+  return (value / 100).toFixed(2).replace(".", ",");
+}
+
 function DashboardView({ year }: { year: number }) {
   const sheet = getYearSheet(year);
   const allTotals = monthlyTotals(sheet.rows);
@@ -83,6 +156,153 @@ function DashboardView({ year }: { year: number }) {
 }
 
 function CostsView({ year }: { year: string }) {
+  const [month, setMonth] = useState(new Date().getMonth() + 1);
+  const [bases, setBases] = useState<{ categories: BaseOption[]; accounts: BaseOption[]; cards: BaseOption[] }>({ categories: [], accounts: [], cards: [] });
+  const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
+  const [summary, setSummary] = useState<ExpenseSummary>({ totalConfirmedCents: 0, totalCardCents: 0, totalPendingCents: 0, count: 0, byCategory: [] });
+  const [form, setForm] = useState<ExpenseFormState>(() => emptyExpenseForm(year, month));
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = `year=${year}&month=${month}`;
+      const [basesResponse, expensesResponse, summaryResponse] = await Promise.all([
+        fetch(`${localApiBaseUrl}/api/costs/bases`),
+        fetch(`${localApiBaseUrl}/api/costs/expenses?${params}`),
+        fetch(`${localApiBaseUrl}/api/costs/summary?${params}`),
+      ]);
+      const [nextBases, nextExpenses, nextSummary] = await Promise.all([readJson(basesResponse), readJson(expensesResponse), readJson(summaryResponse)]);
+      setBases(nextBases);
+      setExpenses(nextExpenses);
+      setSummary(nextSummary);
+      setForm((current) => ({
+        ...current,
+        competenceMonth: `${year}-${String(month).padStart(2, "0")}`,
+        date: current.date || `${year}-${String(month).padStart(2, "0")}-01`,
+        categoryId: current.categoryId || nextBases.categories[0]?.id || "",
+        accountId: current.accountId || nextBases.accounts[0]?.id || "",
+        cardId: current.cardId || nextBases.cards[0]?.id || "",
+      }));
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Nao foi possivel carregar custos.");
+    } finally {
+      setLoading(false);
+    }
+  }, [month, year]);
+
+  useEffect(() => {
+    // A aba sincroniza com a API local sempre que o periodo muda.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadData();
+  }, [loadData]);
+
+  async function submitExpense(event: FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`${localApiBaseUrl}/api/costs/expenses${editingId ? `/${editingId}` : ""}`, {
+        method: editingId ? "PUT" : "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      await readJson(response);
+      setEditingId(null);
+      setForm(emptyExpenseForm(year, month));
+      await loadData();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Nao foi possivel salvar a despesa.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function cancelExpense(id: string) {
+    if (!window.confirm("Cancelar esta despesa? O registro sera preservado para auditoria.")) {
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await readJson(await fetch(`${localApiBaseUrl}/api/costs/expenses/${id}/cancel`, { method: "POST" }));
+      await loadData();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Nao foi possivel cancelar a despesa.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function editExpense(expense: ExpenseRecord) {
+    setEditingId(expense.id);
+    setForm({
+      description: expense.description,
+      amount: centsToInput(expense.amountCents),
+      date: expense.date,
+      competenceMonth: expense.competenceMonth,
+      categoryId: expense.categoryId ?? "",
+      paymentMethod: expense.paymentMethod,
+      accountId: expense.accountId ?? "",
+      cardId: expense.cardId ?? "",
+      notes: expense.notes ?? "",
+      classificationStatus: expense.classificationStatus === "PENDENTE_REVISAO" ? "PENDENTE_REVISAO" : "CONFIRMADO",
+      isInstallment: Boolean(expense.totalInstallments && expense.totalInstallments > 1),
+      installments: expense.totalInstallments ?? 1,
+    });
+  }
+
+  return (
+    <>
+      <section className="section-head"><div><p className="eyebrow">Custos locais</p><h2>Despesas persistidas em SQLite</h2></div><span>Compras do cartao entram como despesas; pagamento de fatura nao gera nova despesa.</span></section>
+      <section className="costs-toolbar">
+        <select aria-label="Mes de competencia" value={month} onChange={(event) => setMonth(Number(event.target.value))}>{monthOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
+        <button onClick={() => { setEditingId(null); setForm(emptyExpenseForm(year, month)); }}>Nova despesa</button>
+        <button onClick={() => void loadData()}>Atualizar</button>
+      </section>
+      {error && <p className="error-banner">{error}</p>}
+      <section className="kpi-grid"><Kpi title="Despesas confirmadas" value={fmt(summary.totalConfirmedCents / 100)} /><Kpi title="No cartao" value={fmt(summary.totalCardCents / 100)} tone="blue" /><Kpi title="Pendentes" value={fmt(summary.totalPendingCents / 100)} tone="amber" /><Kpi title="Lancamentos" value={String(summary.count)} tone="green" /></section>
+      <section className="split wide-left">
+        <article className="panel">
+          <div className="chart-head"><h3>{editingId ? "Editar despesa" : "Nova despesa"}</h3><strong>{year}/{String(month).padStart(2, "0")}</strong></div>
+          <form className="expense-form" onSubmit={(event) => void submitExpense(event)}>
+            <label>Descricao<input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} required /></label>
+            <label>Valor<span className="money-input"><b>R$</b><input inputMode="decimal" placeholder="123,45" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} required /></span></label>
+            <label>Data da compra<input type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} required /></label>
+            <label>Mes da fatura<input type="month" value={form.competenceMonth} onChange={(event) => setForm({ ...form, competenceMonth: event.target.value })} required /></label>
+            <label>Categoria<select value={form.categoryId} onChange={(event) => setForm({ ...form, categoryId: event.target.value })} required><option value="">Selecione</option>{bases.categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+            <label>Meio<select value={form.paymentMethod} onChange={(event) => setForm({ ...form, paymentMethod: event.target.value as "CONTA" | "CARTAO" })}><option value="CONTA">Conta</option><option value="CARTAO">Cartao</option></select></label>
+            {form.paymentMethod === "CONTA" ? <label>Conta<select value={form.accountId} onChange={(event) => setForm({ ...form, accountId: event.target.value })} required><option value="">Selecione</option>{bases.accounts.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : <label>Cartao<select value={form.cardId} onChange={(event) => setForm({ ...form, cardId: event.target.value })} required><option value="">Selecione</option>{bases.cards.map((item) => <option key={item.id} value={item.id}>{item.name}{item.status === "HISTORICO" ? " (historico)" : ""}</option>)}</select></label>}
+            <label>Status<select value={form.classificationStatus} onChange={(event) => setForm({ ...form, classificationStatus: event.target.value as "CONFIRMADO" | "PENDENTE_REVISAO" })}><option value="CONFIRMADO">Confirmado</option><option value="PENDENTE_REVISAO">Pendente de revisao</option></select></label>
+            <label className="checkbox-row"><input type="checkbox" checked={form.isInstallment} onChange={(event) => setForm({ ...form, isInstallment: event.target.checked, installments: event.target.checked ? Math.max(2, form.installments) : 1, paymentMethod: event.target.checked ? "CARTAO" : form.paymentMethod })} /> Parcelado</label>
+            {form.isInstallment && <label>Parcelas<input type="number" min="2" value={form.installments} onChange={(event) => setForm({ ...form, installments: Number(event.target.value) })} /></label>}
+            <label className="full-row">Observacao<input value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></label>
+            <div className="form-actions"><button className="primary" disabled={saving || bases.categories.length === 0}>{saving ? "Salvando..." : editingId ? "Salvar edicao" : "Cadastrar"}</button>{editingId && <button type="button" onClick={() => { setEditingId(null); setForm(emptyExpenseForm(year, month)); }}>Cancelar edicao</button>}</div>
+          </form>
+        </article>
+        <article className="panel">
+          <div className="chart-head"><h3>Por categoria</h3><strong>{fmt(summary.totalConfirmedCents / 100)}</strong></div>
+          <div className="simple-bars">{summary.byCategory.length ? summary.byCategory.map((item) => <div key={item.category}><span>{item.category}</span><i style={{ width: `${Math.max(4, (item.amountCents / Math.max(1, summary.totalConfirmedCents)) * 100)}%` }} /><b>{fmt(item.amountCents / 100)}</b></div>) : <p className="empty-state">Sem despesas confirmadas neste periodo.</p>}</div>
+        </article>
+      </section>
+      <article className="table-panel">
+        <table className="data-table">
+          <thead><tr>{["Data", "Descricao", "Categoria", "Meio", "Parcela", "Status", "Valor", "Acoes"].map((head) => <th key={head}>{head}</th>)}</tr></thead>
+          <tbody>{loading ? <tr><td colSpan={8}>Carregando...</td></tr> : expenses.length === 0 ? <tr><td colSpan={8}>Nenhuma despesa cadastrada no periodo. Rode o bootstrap local para criar categorias, conta e cartoes.</td></tr> : expenses.map((expense) => <tr key={expense.id} className={expense.transactionStatus !== "ACTIVE" ? "muted-row" : ""}>
+            <th>{fmtDate(expense.date)}<span>{expense.competenceMonth}</span></th><td>{expense.description}</td><td>{expense.categoryName ?? "-"}</td><td>{expense.paymentMethod === "CARTAO" ? expense.cardName : expense.accountName}</td><td>{expense.installmentNumber ? `${expense.installmentNumber}/${expense.totalInstallments}` : "-"}</td><td><span className={`status-badge ${expense.transactionStatus === "ACTIVE" ? expense.classificationStatus.toLowerCase() : "cancelado"}`}>{expense.transactionStatus === "ACTIVE" ? expense.classificationStatus : "CANCELADO"}</span></td><td>{fmt(expense.amountCents / 100)}</td><td className="row-actions"><button onClick={() => editExpense(expense)} disabled={expense.transactionStatus !== "ACTIVE"}>Editar</button><button onClick={() => void cancelExpense(expense.id)} disabled={expense.transactionStatus !== "ACTIVE"}>Cancelar</button></td>
+          </tr>)}</tbody>
+        </table>
+      </article>
+    </>
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function StaticCostsView({ year }: { year: string }) {
   const sheet = getYearSheet(Number(year));
   const detailed = hasDetailedExpenseRows(sheet.rows);
   const totals = monthlyTotals(sheet.rows, detailed ? "expenses" : "all");
