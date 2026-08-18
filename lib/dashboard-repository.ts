@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { requireAuthenticatedUser, type AuthenticatedUserContext } from "./auth-context.ts";
-import { calculateDashboardSummary, type DashboardPeriod, type DashboardSummary, type DashboardTransaction, type EstimatedCashback } from "./dashboard-rules.ts";
+import { calculateDashboardSummary, isCardPurchase, type DashboardPeriod, type DashboardSummary, type DashboardTransaction, type EstimatedCashback } from "./dashboard-rules.ts";
 
 export type DashboardRepository = {
   getDashboardSummary(context: AuthenticatedUserContext, period: DashboardPeriod): DashboardSummary;
@@ -12,7 +12,9 @@ export type DashboardOverview = {
   monthlySeries: DashboardMonthSummary[];
   categories: DashboardCategorySummary[];
   transactionCount: number;
+  countableTransactionCount: number;
   hasTransactions: boolean;
+  hasFinancialImpact: boolean;
 };
 
 export type DashboardMonthSummary = {
@@ -112,9 +114,53 @@ export class SQLiteDashboardRepository implements DashboardRepository {
       monthlySeries: buildMonthlySeries(period, mappedTransactions),
       categories: buildCategorySummary(mappedTransactions),
       transactionCount: transactions.length,
+      countableTransactionCount: countDashboardActivities(mappedTransactions, estimatedCashbacks.length),
       hasTransactions: transactions.length > 0,
+      hasFinancialImpact: hasDashboardImpact(summary),
     };
   }
+}
+
+function countDashboardActivities(transactions: DashboardTransaction[], estimatedCashbackCount: number) {
+  return transactions.filter(isDashboardActivity).length + estimatedCashbackCount;
+}
+
+function isDashboardActivity(transaction: DashboardTransaction) {
+  if (transaction.transactionStatus !== "ACTIVE") {
+    return false;
+  }
+
+  if (transaction.classificationStatus === "PENDENTE_REVISAO" || transaction.classificationStatus === "REJEITADO") {
+    return true;
+  }
+
+  if (transaction.classificationStatus !== "CONFIRMADO") {
+    return false;
+  }
+
+  return isCardPurchase(transaction)
+    || (transaction.nature === "DESPESA" && transaction.categoryCountsAsLivingCost === true)
+    || transaction.nature === "TRANSFERENCIA"
+    || transaction.nature === "INVESTIMENTO"
+    || transaction.nature === "RECEITA";
+}
+
+function hasDashboardImpact(summary: DashboardSummary) {
+  return [
+    summary.livingCostCents,
+    summary.cardPurchasesCents,
+    summary.invoicePaymentsCents,
+    summary.internalTransfersCents,
+    summary.reserveTransfersCents,
+    summary.contributionsCents,
+    summary.reinvestmentsCents,
+    summary.dividendsCents,
+    summary.confirmedCashbackCents,
+    summary.estimatedCashbackCents,
+    summary.reserveEarningsCents,
+    summary.pendingReviewCents,
+    summary.rejectedCents,
+  ].some((amountCents) => amountCents > 0);
 }
 
 function mapTransaction(row: TransactionRow): DashboardTransaction {

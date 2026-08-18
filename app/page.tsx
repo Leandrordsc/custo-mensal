@@ -76,7 +76,9 @@ type DashboardOverview = {
   monthlySeries: { month: string; livingCostCents: number; cardPurchasesCents: number; pendingReviewCents: number }[];
   categories: { category: string; amountCents: number }[];
   transactionCount: number;
+  countableTransactionCount: number;
   hasTransactions: boolean;
+  hasFinancialImpact: boolean;
 };
 
 const emptyDashboardOverview: DashboardOverview = {
@@ -99,7 +101,9 @@ const emptyDashboardOverview: DashboardOverview = {
   monthlySeries: [],
   categories: [],
   transactionCount: 0,
+  countableTransactionCount: 0,
   hasTransactions: false,
+  hasFinancialImpact: false,
 };
 
 const emptyExpenseForm = (year: string, month: number): ExpenseFormState => ({
@@ -183,7 +187,9 @@ function assertDashboardOverview(value: unknown): DashboardOverview {
     || !Array.isArray(candidate.monthlySeries)
     || !Array.isArray(candidate.categories)
     || typeof candidate.transactionCount !== "number"
+    || typeof candidate.countableTransactionCount !== "number"
     || typeof candidate.hasTransactions !== "boolean"
+    || typeof candidate.hasFinancialImpact !== "boolean"
   ) {
     throw new Error("Payload invalido do Dashboard.");
   }
@@ -231,10 +237,10 @@ function DashboardView({ year }: { year: number }) {
         <button onClick={() => void loadDashboard()}>Atualizar</button>
       </section>
       {error && <p className="error-banner">{error}</p>}
-      {!loading && !error && !dashboard.hasTransactions && <p className="empty-dashboard">Nenhum lancamento persistido encontrado para este periodo. Cadastre despesas na aba Custos para alimentar o Dashboard.</p>}
+      {!loading && !error && !dashboard.hasFinancialImpact && <p className="empty-dashboard">{dashboard.hasTransactions ? "Existem registros no periodo, mas nenhum impacto financeiro relevante para o Dashboard." : "Nenhum lancamento persistido encontrado para este periodo. Cadastre despesas na aba Custos para alimentar o Dashboard."}</p>}
       <section className="kpi-grid"><Kpi title="Custo de vida" value={fmt(dashboard.summary.livingCostCents / 100)} /><Kpi title="Compras no cartao" value={fmt(dashboard.summary.cardPurchasesCents / 100)} tone="blue" /><Kpi title="Pendentes" value={fmt(dashboard.summary.pendingReviewCents / 100)} tone="amber" /><Kpi title="Aportes novos" value={fmt(dashboard.summary.contributionsCents / 100)} tone="green" /><Kpi title="Dividendos" value={fmt(dashboard.summary.dividendsCents / 100)} tone="violet" /></section>
       <section className="split wide-left">
-        <article className="panel"><div className="chart-head"><h3>Evolucao mensal persistida</h3><strong>{loading ? "Carregando..." : `${dashboard.transactionCount} lancamentos`}</strong></div><div className="month-bars labeled dashboard-bars">{dashboard.monthlySeries.length ? dashboard.monthlySeries.map((item) => <div key={item.month}><i style={{ height: `${Math.max(6, (item.livingCostCents / maxMonth) * 100)}%` }} /><span>{item.month.slice(5)}</span><b>{fmt(item.livingCostCents / 100)}</b></div>) : <p className="empty-state">Sem dados para grafico.</p>}</div></article>
+        <article className="panel"><div className="chart-head"><h3>Evolucao mensal persistida</h3><strong>{loading ? "Carregando..." : `${dashboard.countableTransactionCount} relevantes`}</strong></div><div className="month-bars labeled dashboard-bars">{dashboard.monthlySeries.length ? dashboard.monthlySeries.map((item) => <div key={item.month}><i style={{ height: `${Math.max(6, (item.livingCostCents / maxMonth) * 100)}%` }} /><span>{item.month.slice(5)}</span><b>{fmt(item.livingCostCents / 100)}</b></div>) : <p className="empty-state">Sem dados para grafico.</p>}</div></article>
         <article className="panel"><div className="chart-head"><h3>Por categoria</h3><strong>{fmt(dashboard.summary.livingCostCents / 100)}</strong></div><div className="simple-bars">{dashboard.categories.length ? dashboard.categories.map((item) => <div key={item.category}><span>{item.category}</span><i style={{ width: `${Math.max(4, (item.amountCents / Math.max(1, dashboard.summary.livingCostCents)) * 100)}%` }} /><b>{fmt(item.amountCents / 100)}</b></div>) : <p className="empty-state">Sem despesas confirmadas.</p>}</div></article>
       </section>
       <section className="kpi-grid"><Kpi title="Faturas pagas" value={fmt(dashboard.summary.invoicePaymentsCents / 100)} /><Kpi title="Transferencias internas" value={fmt(dashboard.summary.internalTransfersCents / 100)} /><Kpi title="Reservas e caixinhas" value={fmt(dashboard.summary.reserveTransfersCents / 100)} /><Kpi title="Reinvestimentos" value={fmt(dashboard.summary.reinvestmentsCents / 100)} /><Kpi title="Cashback real" value={fmt(dashboard.summary.confirmedCashbackCents / 100)} tone="green" /><Kpi title="Cashback estimado" value={fmt(dashboard.summary.estimatedCashbackCents / 100)} tone="amber" /><Kpi title="Rendimentos" value={fmt(dashboard.summary.reserveEarningsCents / 100)} tone="blue" /><Kpi title="Ignorados" value={fmt(dashboard.summary.ignoredCents / 100)} /></section>

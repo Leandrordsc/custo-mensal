@@ -61,6 +61,8 @@ test("api dashboard retorna zeros para banco sem transacoes", async () => {
 
     assert.equal(response.status, 200);
     assert.equal(body.hasTransactions, false);
+    assert.equal(body.hasFinancialImpact, false);
+    assert.equal(body.countableTransactionCount, 0);
     assert.equal(body.summary.livingCostCents, 0);
     assert.equal(body.summary.cardPurchasesCents, 0);
   } finally {
@@ -118,10 +120,38 @@ test("api dashboard soma despesas persistidas por competencia e isola usuarios",
     assert.equal(august.summary.invoicePaymentsCents, 10000);
     assert.equal(august.summary.reserveTransfersCents, 8000);
     assert.equal(august.summary.internalTransfersCents, 18000);
+    assert.equal(august.hasTransactions, true);
+    assert.equal(august.hasFinancialImpact, true);
+    assert.equal(august.countableTransactionCount > 0, true);
     assert.equal(september.summary.livingCostCents, 10000);
     assert.equal(september.summary.cardPurchasesCents, 10000);
     assert.equal(august.categories[0].amountCents, 22000);
     assert.equal(august.summary.livingCostCents < 99900, true);
+  } finally {
+    cleanup();
+  }
+});
+
+test("api dashboard separa registros brutos de impacto financeiro relevante", async () => {
+  const { db, cleanup } = await createDatabase();
+  try {
+    const userA = { userId: "user_a" };
+    bootstrapLocalUser(db, userA);
+    const service = new ExpenseService(db);
+    const basesA = service.listBases(userA);
+    const [canceled] = service.createExpense(userA, expenseInput(basesA, { amount: "70,00" }));
+    service.cancelExpense(userA, canceled.id);
+
+    const handler = createLocalApiHandler({ db, context: userA });
+    const body = await (await handler(new Request("http://local/api/dashboard?year=2026&month=8"))).json();
+
+    assert.equal(body.transactionCount, 1);
+    assert.equal(body.hasTransactions, true);
+    assert.equal(body.countableTransactionCount, 0);
+    assert.equal(body.hasFinancialImpact, false);
+    assert.equal(body.summary.livingCostCents, 0);
+    assert.equal(body.summary.cardPurchasesCents, 0);
+    assert.equal(body.summary.ignoredCents, 7000);
   } finally {
     cleanup();
   }

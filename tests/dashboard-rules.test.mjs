@@ -122,6 +122,31 @@ test("calcula Dashboard mensal por transactions sem dupla contagem", () => {
   assert.equal(summary.ignoredCents, 10079);
 });
 
+test("compra de cartao exige origem compativel com card_id", () => {
+  const base = {
+    userId: "user_a",
+    nature: "DESPESA",
+    subtype: "COMPRA",
+    classificationStatus: "CONFIRMADO",
+    transactionStatus: "ACTIVE",
+    competenceMonth: "2026-06",
+    amountCents: 10000,
+    categoryCountsAsLivingCost: true,
+  };
+  const summary = calculateDashboardSummary({
+    period: { fromMonth: "2026-06", toMonth: "2026-06" },
+    transactions: [
+      { ...base, id: "manual-card", origin: "MANUAL", cardId: "card_a" },
+      { ...base, id: "origin-card", origin: "CARTAO", cardId: null },
+      { ...base, id: "conflicting-account-card", origin: "CONTA", cardId: "card_a" },
+      { ...base, id: "manual-no-card", origin: "MANUAL", cardId: null },
+    ],
+  });
+
+  assert.equal(summary.livingCostCents, 40000);
+  assert.equal(summary.cardPurchasesCents, 20000);
+});
+
 test("calculo do Dashboard valida meses canonicos, periodo e centavos", () => {
   const baseTransaction = {
     id: "tx",

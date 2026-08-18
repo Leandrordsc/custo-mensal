@@ -118,7 +118,7 @@ export function calculateDashboardSummary({
       continue;
     }
 
-    if (transaction.nature === "DESPESA" && transaction.subtype === "COMPRA" && (transaction.origin === "CARTAO" || Boolean(transaction.cardId))) {
+    if (isCardPurchase(transaction)) {
       summary.cardPurchasesCents += transaction.amountCents;
     }
 
@@ -170,6 +170,12 @@ export function calculateDashboardSummary({
     .reduce((total, item) => total + item.amountCents, 0);
 
   return summary;
+}
+
+export function isCardPurchase(transaction: DashboardTransaction) {
+  return transaction.nature === "DESPESA"
+    && transaction.subtype === "COMPRA"
+    && (transaction.origin === "CARTAO" || (transaction.origin === "MANUAL" && Boolean(transaction.cardId)));
 }
 
 export function isMonthInPeriod(month: string, period: DashboardPeriod) {
