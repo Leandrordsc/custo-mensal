@@ -419,6 +419,18 @@ h3 { font-size: 16px; }
   margin: 0;
   color: var(--muted);
 }
+.empty-dashboard {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--muted);
+  margin: 0 0 12px;
+  padding: 12px;
+  font-weight: 750;
+}
+.dashboard-bars {
+  min-height: 210px;
+}
 .status-badge {
   display: inline-block;
   border-radius: 999px;

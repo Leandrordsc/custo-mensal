@@ -89,6 +89,7 @@ test("calcula Dashboard mensal por transactions sem dupla contagem", () => {
     period: { fromMonth: "2026-06", toMonth: "2026-06" },
     transactions: [
       { id: "purchase", userId: "user_a", nature: "DESPESA", subtype: "COMPRA", origin: "CARTAO", classificationStatus: "CONFIRMADO", transactionStatus: "ACTIVE", competenceMonth: "2026-06", amountCents: 10000, categoryCountsAsLivingCost: true },
+      { id: "manual-card", userId: "user_a", nature: "DESPESA", subtype: "COMPRA", origin: "MANUAL", classificationStatus: "CONFIRMADO", transactionStatus: "ACTIVE", competenceMonth: "2026-06", amountCents: 2500, cardId: "card_a", categoryCountsAsLivingCost: true },
       { id: "invoice", userId: "user_a", nature: "TRANSFERENCIA", subtype: "PAGAMENTO_FATURA", origin: "CONTA", classificationStatus: "CONFIRMADO", transactionStatus: "ACTIVE", competenceMonth: "2026-06", amountCents: 10000 },
       { id: "reserve", userId: "user_a", nature: "TRANSFERENCIA", subtype: "TRANSFERENCIA_RESERVA", origin: "CONTA", classificationStatus: "CONFIRMADO", transactionStatus: "ACTIVE", competenceMonth: "2026-06", amountCents: 5000 },
       { id: "aporte", userId: "user_a", nature: "INVESTIMENTO", subtype: "APORTE", origin: "CONTA", classificationStatus: "CONFIRMADO", transactionStatus: "ACTIVE", competenceMonth: "2026-06", amountCents: 20000 },
@@ -106,8 +107,8 @@ test("calcula Dashboard mensal por transactions sem dupla contagem", () => {
     ],
   });
 
-  assert.equal(summary.livingCostCents, 10000);
-  assert.equal(summary.cardPurchasesCents, 10000);
+  assert.equal(summary.livingCostCents, 12500);
+  assert.equal(summary.cardPurchasesCents, 12500);
   assert.equal(summary.invoicePaymentsCents, 10000);
   assert.equal(summary.internalTransfersCents, 15000);
   assert.equal(summary.reserveTransfersCents, 5000);

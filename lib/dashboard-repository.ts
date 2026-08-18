@@ -4,6 +4,27 @@ import { calculateDashboardSummary, type DashboardPeriod, type DashboardSummary,
 
 export type DashboardRepository = {
   getDashboardSummary(context: AuthenticatedUserContext, period: DashboardPeriod): DashboardSummary;
+  getDashboardOverview(context: AuthenticatedUserContext, period: DashboardPeriod): DashboardOverview;
+};
+
+export type DashboardOverview = {
+  summary: DashboardSummary;
+  monthlySeries: DashboardMonthSummary[];
+  categories: DashboardCategorySummary[];
+  transactionCount: number;
+  hasTransactions: boolean;
+};
+
+export type DashboardMonthSummary = {
+  month: string;
+  livingCostCents: number;
+  cardPurchasesCents: number;
+  pendingReviewCents: number;
+};
+
+export type DashboardCategorySummary = {
+  category: string;
+  amountCents: number;
 };
 
 type TransactionRow = {
@@ -16,7 +37,9 @@ type TransactionRow = {
   transaction_status: DashboardTransaction["transactionStatus"];
   competence_month: string;
   amount_cents: number;
+  card_id: string | null;
   category_counts_as_living_cost: 0 | 1 | null;
+  category_name: string | null;
 };
 
 type EstimatedCashbackRow = {
@@ -37,6 +60,10 @@ export class SQLiteDashboardRepository implements DashboardRepository {
   }
 
   getDashboardSummary(context: AuthenticatedUserContext, period: DashboardPeriod): DashboardSummary {
+    return this.getDashboardOverview(context, period).summary;
+  }
+
+  getDashboardOverview(context: AuthenticatedUserContext, period: DashboardPeriod): DashboardOverview {
     const { userId } = requireAuthenticatedUser(context);
 
     const transactions = this.db.prepare(`
@@ -50,7 +77,9 @@ export class SQLiteDashboardRepository implements DashboardRepository {
         t.transaction_status,
         t.competence_month,
         t.amount_cents,
-        c.counts_as_living_cost as category_counts_as_living_cost
+        t.card_id,
+        c.counts_as_living_cost as category_counts_as_living_cost,
+        c.name as category_name
       from transactions t
       left join categories c
         on c.id = t.category_id
@@ -71,11 +100,20 @@ export class SQLiteDashboardRepository implements DashboardRepository {
         and transaction_id is null
     `).all(userId, period.fromMonth, period.toMonth) as EstimatedCashbackRow[];
 
-    return calculateDashboardSummary({
+    const mappedTransactions = transactions.map(mapTransaction);
+    const summary = calculateDashboardSummary({
       period,
-      transactions: transactions.map(mapTransaction),
+      transactions: mappedTransactions,
       estimatedCashbacks: estimatedCashbacks.map(mapEstimatedCashback),
     });
+
+    return {
+      summary,
+      monthlySeries: buildMonthlySeries(period, mappedTransactions),
+      categories: buildCategorySummary(mappedTransactions),
+      transactionCount: transactions.length,
+      hasTransactions: transactions.length > 0,
+    };
   }
 }
 
@@ -90,6 +128,8 @@ function mapTransaction(row: TransactionRow): DashboardTransaction {
     transactionStatus: row.transaction_status,
     competenceMonth: row.competence_month,
     amountCents: row.amount_cents,
+    cardId: row.card_id,
+    categoryName: row.category_name,
     categoryCountsAsLivingCost: row.category_counts_as_living_cost === null ? null : row.category_counts_as_living_cost === 1,
   };
 }
@@ -104,4 +144,52 @@ function mapEstimatedCashback(row: EstimatedCashbackRow): EstimatedCashback {
     contabilizable: false,
     transactionId: row.transaction_id,
   };
+}
+
+function buildMonthlySeries(period: DashboardPeriod, transactions: DashboardTransaction[]): DashboardMonthSummary[] {
+  const months = enumerateMonths(period);
+  return months.map((month) => {
+    const summary = calculateDashboardSummary({
+      period: { fromMonth: month, toMonth: month },
+      transactions,
+    });
+    return {
+      month,
+      livingCostCents: summary.livingCostCents,
+      cardPurchasesCents: summary.cardPurchasesCents,
+      pendingReviewCents: summary.pendingReviewCents,
+    };
+  });
+}
+
+function buildCategorySummary(transactions: DashboardTransaction[]): DashboardCategorySummary[] {
+  const totals = new Map<string, number>();
+  for (const transaction of transactions) {
+    if (
+      transaction.nature === "DESPESA"
+      && transaction.classificationStatus === "CONFIRMADO"
+      && transaction.transactionStatus === "ACTIVE"
+      && transaction.categoryCountsAsLivingCost === true
+    ) {
+      const category = transaction.categoryName ?? "Sem categoria";
+      totals.set(category, (totals.get(category) ?? 0) + transaction.amountCents);
+    }
+  }
+  return Array.from(totals, ([category, amountCents]) => ({ category, amountCents }))
+    .sort((a, b) => b.amountCents - a.amountCents);
+}
+
+function enumerateMonths(period: DashboardPeriod) {
+  const months: string[] = [];
+  let [year, month] = period.fromMonth.split("-").map(Number);
+  const [endYear, endMonth] = period.toMonth.split("-").map(Number);
+  while (year < endYear || (year === endYear && month <= endMonth)) {
+    months.push(`${year}-${String(month).padStart(2, "0")}`);
+    month += 1;
+    if (month > 12) {
+      month = 1;
+      year += 1;
+    }
+  }
+  return months;
 }

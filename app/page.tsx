@@ -56,6 +56,51 @@ type ExpenseFormState = {
   isInstallment: boolean;
   installments: number;
 };
+type DashboardOverview = {
+  summary: {
+    livingCostCents: number;
+    cardPurchasesCents: number;
+    invoicePaymentsCents: number;
+    internalTransfersCents: number;
+    reserveTransfersCents: number;
+    contributionsCents: number;
+    reinvestmentsCents: number;
+    dividendsCents: number;
+    confirmedCashbackCents: number;
+    estimatedCashbackCents: number;
+    reserveEarningsCents: number;
+    pendingReviewCents: number;
+    rejectedCents: number;
+    ignoredCents: number;
+  };
+  monthlySeries: { month: string; livingCostCents: number; cardPurchasesCents: number; pendingReviewCents: number }[];
+  categories: { category: string; amountCents: number }[];
+  transactionCount: number;
+  hasTransactions: boolean;
+};
+
+const emptyDashboardOverview: DashboardOverview = {
+  summary: {
+    livingCostCents: 0,
+    cardPurchasesCents: 0,
+    invoicePaymentsCents: 0,
+    internalTransfersCents: 0,
+    reserveTransfersCents: 0,
+    contributionsCents: 0,
+    reinvestmentsCents: 0,
+    dividendsCents: 0,
+    confirmedCashbackCents: 0,
+    estimatedCashbackCents: 0,
+    reserveEarningsCents: 0,
+    pendingReviewCents: 0,
+    rejectedCents: 0,
+    ignoredCents: 0,
+  },
+  monthlySeries: [],
+  categories: [],
+  transactionCount: 0,
+  hasTransactions: false,
+};
 
 const emptyExpenseForm = (year: string, month: number): ExpenseFormState => ({
   description: "",
@@ -128,11 +173,77 @@ async function readJson(response: Response) {
   return body;
 }
 
+function assertDashboardOverview(value: unknown): DashboardOverview {
+  if (!value || typeof value !== "object") {
+    throw new Error("Payload invalido do Dashboard.");
+  }
+  const candidate = value as Partial<DashboardOverview>;
+  if (
+    !candidate.summary
+    || !Array.isArray(candidate.monthlySeries)
+    || !Array.isArray(candidate.categories)
+    || typeof candidate.transactionCount !== "number"
+    || typeof candidate.hasTransactions !== "boolean"
+  ) {
+    throw new Error("Payload invalido do Dashboard.");
+  }
+  return candidate as DashboardOverview;
+}
+
 function centsToInput(value: number) {
   return (value / 100).toFixed(2).replace(".", ",");
 }
 
 function DashboardView({ year }: { year: number }) {
+  const [month, setMonth] = useState<string>("all");
+  const [dashboard, setDashboard] = useState<DashboardOverview>(emptyDashboardOverview);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const maxMonth = Math.max(1, ...dashboard.monthlySeries.map((item) => Math.max(item.livingCostCents, item.cardPurchasesCents, item.pendingReviewCents)));
+
+  const loadDashboard = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const nextDashboard = assertDashboardOverview(await readJson(await fetch(`${localApiBaseUrl}/api/dashboard?year=${year}&month=${month}`)));
+      setDashboard(nextDashboard);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Nao foi possivel carregar o Dashboard local.");
+      setDashboard(emptyDashboardOverview);
+    } finally {
+      setLoading(false);
+    }
+  }, [month, year]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadDashboard();
+  }, [loadDashboard]);
+
+  return (
+    <>
+      <section className="section-head"><div><p className="eyebrow">Dashboard SQLite</p><h2>Visao consolidada dos lancamentos persistidos</h2></div><span>Transactions e a fonte principal; faturas e transferencias ficam fora do custo de vida.</span></section>
+      <section className="costs-toolbar">
+        <select aria-label="Periodo do Dashboard" value={month} onChange={(event) => setMonth(event.target.value)}>
+          <option value="all">Ano inteiro</option>
+          {monthOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+        </select>
+        <button onClick={() => void loadDashboard()}>Atualizar</button>
+      </section>
+      {error && <p className="error-banner">{error}</p>}
+      {!loading && !error && !dashboard.hasTransactions && <p className="empty-dashboard">Nenhum lancamento persistido encontrado para este periodo. Cadastre despesas na aba Custos para alimentar o Dashboard.</p>}
+      <section className="kpi-grid"><Kpi title="Custo de vida" value={fmt(dashboard.summary.livingCostCents / 100)} /><Kpi title="Compras no cartao" value={fmt(dashboard.summary.cardPurchasesCents / 100)} tone="blue" /><Kpi title="Pendentes" value={fmt(dashboard.summary.pendingReviewCents / 100)} tone="amber" /><Kpi title="Aportes novos" value={fmt(dashboard.summary.contributionsCents / 100)} tone="green" /><Kpi title="Dividendos" value={fmt(dashboard.summary.dividendsCents / 100)} tone="violet" /></section>
+      <section className="split wide-left">
+        <article className="panel"><div className="chart-head"><h3>Evolucao mensal persistida</h3><strong>{loading ? "Carregando..." : `${dashboard.transactionCount} lancamentos`}</strong></div><div className="month-bars labeled dashboard-bars">{dashboard.monthlySeries.length ? dashboard.monthlySeries.map((item) => <div key={item.month}><i style={{ height: `${Math.max(6, (item.livingCostCents / maxMonth) * 100)}%` }} /><span>{item.month.slice(5)}</span><b>{fmt(item.livingCostCents / 100)}</b></div>) : <p className="empty-state">Sem dados para grafico.</p>}</div></article>
+        <article className="panel"><div className="chart-head"><h3>Por categoria</h3><strong>{fmt(dashboard.summary.livingCostCents / 100)}</strong></div><div className="simple-bars">{dashboard.categories.length ? dashboard.categories.map((item) => <div key={item.category}><span>{item.category}</span><i style={{ width: `${Math.max(4, (item.amountCents / Math.max(1, dashboard.summary.livingCostCents)) * 100)}%` }} /><b>{fmt(item.amountCents / 100)}</b></div>) : <p className="empty-state">Sem despesas confirmadas.</p>}</div></article>
+      </section>
+      <section className="kpi-grid"><Kpi title="Faturas pagas" value={fmt(dashboard.summary.invoicePaymentsCents / 100)} /><Kpi title="Transferencias internas" value={fmt(dashboard.summary.internalTransfersCents / 100)} /><Kpi title="Reservas e caixinhas" value={fmt(dashboard.summary.reserveTransfersCents / 100)} /><Kpi title="Reinvestimentos" value={fmt(dashboard.summary.reinvestmentsCents / 100)} /><Kpi title="Cashback real" value={fmt(dashboard.summary.confirmedCashbackCents / 100)} tone="green" /><Kpi title="Cashback estimado" value={fmt(dashboard.summary.estimatedCashbackCents / 100)} tone="amber" /><Kpi title="Rendimentos" value={fmt(dashboard.summary.reserveEarningsCents / 100)} tone="blue" /><Kpi title="Ignorados" value={fmt(dashboard.summary.ignoredCents / 100)} /></section>
+    </>
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function StaticDashboardView({ year }: { year: number }) {
   const sheet = getYearSheet(year);
   const allTotals = monthlyTotals(sheet.rows);
   const expenseTotals = monthlyTotals(sheet.rows, "expenses");

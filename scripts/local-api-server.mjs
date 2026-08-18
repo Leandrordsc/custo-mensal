@@ -1,10 +1,12 @@
 import { createServer } from "node:http";
+import { SQLiteDashboardRepository } from "../lib/dashboard-repository.ts";
 import { ExpenseService } from "../lib/expense-service.ts";
 import { getLocalAuthenticatedUser } from "../lib/local-auth.ts";
 import { getLocalDatabasePath, openLocalDatabase } from "../lib/local-db.ts";
 
 export function createLocalApiHandler({ db, context = getLocalAuthenticatedUser() }) {
   const service = new ExpenseService(db);
+  const dashboardRepository = new SQLiteDashboardRepository(db);
 
   return async function handle(request) {
     try {
@@ -17,6 +19,9 @@ export function createLocalApiHandler({ db, context = getLocalAuthenticatedUser(
 
       if (request.method === "GET" && path === "/api/health") {
         return jsonResponse({ ok: true, userId: context.userId });
+      }
+      if (request.method === "GET" && path === "/api/dashboard") {
+        return jsonResponse(dashboardRepository.getDashboardOverview(context, parseDashboardPeriod(url)));
       }
       if (request.method === "GET" && path === "/api/costs/bases") {
         return jsonResponse(service.listBases(context));
@@ -55,6 +60,23 @@ export function createLocalApiHandler({ db, context = getLocalAuthenticatedUser(
       return jsonResponse({ error: error instanceof Error ? error.message : "Erro inesperado." }, 400);
     }
   };
+}
+
+function parseDashboardPeriod(url) {
+  const year = Number(url.searchParams.get("year"));
+  const monthValue = url.searchParams.get("month") ?? "all";
+  if (!Number.isInteger(year) || year < 2020 || year > 2100) {
+    throw new Error("Ano invalido.");
+  }
+  if (monthValue === "all") {
+    return { fromMonth: `${year}-01`, toMonth: `${year}-12` };
+  }
+  const month = Number(monthValue);
+  if (!Number.isInteger(month) || month < 1 || month > 12) {
+    throw new Error("Mes invalido.");
+  }
+  const canonicalMonth = `${year}-${String(month).padStart(2, "0")}`;
+  return { fromMonth: canonicalMonth, toMonth: canonicalMonth };
 }
 
 function parsePeriod(url) {

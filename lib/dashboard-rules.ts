@@ -23,6 +23,8 @@ export type DashboardTransaction = {
   transactionStatus: TransactionStatus;
   competenceMonth: string;
   amountCents: number;
+  cardId?: string | null;
+  categoryName?: string | null;
   categoryCountsAsLivingCost?: boolean | null;
 };
 
@@ -116,7 +118,7 @@ export function calculateDashboardSummary({
       continue;
     }
 
-    if (transaction.nature === "DESPESA" && transaction.subtype === "COMPRA" && transaction.origin === "CARTAO") {
+    if (transaction.nature === "DESPESA" && transaction.subtype === "COMPRA" && (transaction.origin === "CARTAO" || Boolean(transaction.cardId))) {
       summary.cardPurchasesCents += transaction.amountCents;
     }
 
