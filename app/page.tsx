@@ -80,6 +80,55 @@ type DashboardOverview = {
   hasTransactions: boolean;
   hasFinancialImpact: boolean;
 };
+type CardOverview = {
+  period: { fromMonth: string; toMonth: string };
+  summary: {
+    invoiceCents: number;
+    invoiceTotalCents: number;
+    purchaseCents: number;
+    purchaseTotalCents: number;
+    paymentCents: number;
+    paymentTotalCents: number;
+    confirmedCashbackCents: number;
+    realCashbackCents: number;
+    estimatedCashbackCents: number;
+  };
+  cards: {
+    id: string;
+    name: string;
+    issuer: string | null;
+    status: string;
+    closingDay: number;
+    dueDay: number;
+    cashbackRateBps: number;
+    invoiceCents: number;
+    invoiceTotalCents: number;
+    purchaseTotalCents: number;
+    paymentCents: number;
+    paymentTotalCents: number;
+    confirmedCashbackCents: number;
+    realCashbackCents: number;
+    estimatedCashbackCents: number;
+    installmentCount: number;
+    purchases: CardOverview["purchases"];
+  }[];
+  purchases: {
+    transactionId: string;
+    cardId: string;
+    cardName: string;
+    purchaseId: string | null;
+    date: string;
+    statementMonth: string;
+    description: string;
+    amountCents: number;
+    installmentNumber: number | null;
+    totalInstallments: number | null;
+  }[];
+  monthlyHistory: { month: string; invoiceCents: number; paymentCents: number; confirmedCashbackCents: number; estimatedCashbackCents: number }[];
+  monthlySeries: { month: string; invoiceTotalCents: number; estimatedCashbackCents: number; realCashbackCents: number }[];
+  movements: { transactionId: string; cardId: string; cardName: string; date: string; competenceMonth: string; description: string; amountCents: number }[];
+  hasPurchases: boolean;
+};
 
 const emptyDashboardOverview: DashboardOverview = {
   summary: {
@@ -104,6 +153,26 @@ const emptyDashboardOverview: DashboardOverview = {
   countableTransactionCount: 0,
   hasTransactions: false,
   hasFinancialImpact: false,
+};
+const emptyCardOverview: CardOverview = {
+  period: { fromMonth: "2026-01", toMonth: "2026-12" },
+  summary: {
+    invoiceCents: 0,
+    invoiceTotalCents: 0,
+    purchaseCents: 0,
+    purchaseTotalCents: 0,
+    paymentCents: 0,
+    paymentTotalCents: 0,
+    confirmedCashbackCents: 0,
+    realCashbackCents: 0,
+    estimatedCashbackCents: 0,
+  },
+  cards: [],
+  purchases: [],
+  monthlyHistory: [],
+  monthlySeries: [],
+  movements: [],
+  hasPurchases: false,
 };
 
 const emptyExpenseForm = (year: string, month: number): ExpenseFormState => ({
@@ -145,7 +214,7 @@ export default function Home() {
         {active === "Dashboard" && <DashboardView year={Number(year)} />}
         {active === "Custos" && <CostsView year={year} />}
         {active === "Investimentos" && <InvestmentsView />}
-        {active === "Cartões" && <CardsView />}
+        {active === "Cartões" && <CardsViewConnected />}
         {active === "FIIS - Dividendos" && <DividendsView rows={selectedDividends} />}
       </section>
     </main>
@@ -194,6 +263,23 @@ function assertDashboardOverview(value: unknown): DashboardOverview {
     throw new Error("Payload invalido do Dashboard.");
   }
   return candidate as DashboardOverview;
+}
+
+function assertCardOverview(value: unknown): CardOverview {
+  if (!value || typeof value !== "object") {
+    throw new Error("Payload invalido de Cartoes.");
+  }
+  const candidate = value as Partial<CardOverview>;
+  if (
+    !candidate.summary
+    || !Array.isArray(candidate.cards)
+    || !Array.isArray(candidate.purchases)
+    || !Array.isArray(candidate.monthlyHistory)
+    || !Array.isArray(candidate.movements)
+  ) {
+    throw new Error("Payload invalido de Cartoes.");
+  }
+  return candidate as CardOverview;
 }
 
 function centsToInput(value: number) {
@@ -453,6 +539,59 @@ function InvestmentsView() {
   );
 }
 
+function CardsViewConnected() {
+  const [year, setYear] = useState("2026");
+  const [month, setMonth] = useState<string>("all");
+  const [overview, setOverview] = useState<CardOverview>(emptyCardOverview);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const maxMonth = Math.max(1, ...overview.monthlyHistory.map((item) => Math.max(item.invoiceCents, item.estimatedCashbackCents, item.confirmedCashbackCents)));
+
+  const loadCards = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const nextOverview = assertCardOverview(await readJson(await fetch(`${localApiBaseUrl}/api/cards/overview?year=${year}&month=${month}`)));
+      setOverview(nextOverview);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Nao foi possivel carregar cartoes.");
+      setOverview(emptyCardOverview);
+    } finally {
+      setLoading(false);
+    }
+  }, [month, year]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadCards();
+  }, [loadCards]);
+
+  return (
+    <>
+      <section className="section-head"><div><p className="eyebrow">Cartoes SQLite</p><h2>Fatura, compras e cashback persistidos</h2></div><span>Compras entram uma vez por parcela; pagamentos de fatura aparecem separados como movimentacao.</span></section>
+      <section className="costs-toolbar">
+        <select aria-label="Ano de Cartoes" value={year} onChange={(event) => setYear(event.target.value)}>{annualCostSheets.map((sheet) => <option key={sheet.year}>{sheet.year}</option>)}</select>
+        <select aria-label="Periodo de Cartoes" value={month} onChange={(event) => setMonth(event.target.value)}>
+          <option value="all">Ano inteiro</option>
+          {monthOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+        </select>
+        <button onClick={() => void loadCards()}>Atualizar</button>
+      </section>
+      {error && <p className="error-banner">{error}</p>}
+      {!loading && !error && !overview.hasPurchases && <p className="empty-dashboard">Nenhuma compra de cartao persistida neste periodo. BTG e Mercado Pago continuam listados com totais zerados.</p>}
+      <section className="kpi-grid"><Kpi title="Fatura estimada" value={fmt(overview.summary.invoiceCents / 100)} /><Kpi title="Compras" value={fmt(overview.summary.purchaseCents / 100)} tone="blue" /><Kpi title="Faturas pagas" value={fmt(overview.summary.paymentCents / 100)} /><Kpi title="Cashback real" value={fmt(overview.summary.confirmedCashbackCents / 100)} tone="green" /><Kpi title="Cashback estimado" value={fmt(overview.summary.estimatedCashbackCents / 100)} tone="amber" /></section>
+      <section className="split">
+        <article className="panel"><div className="chart-head"><h3>Cartoes</h3><strong>{loading ? "Carregando..." : `${overview.cards.length} cartoes`}</strong></div><div className="simple-bars">{overview.cards.map((card) => <div key={card.id}><span>{card.name}{card.status === "HISTORICO" ? " (historico)" : ""}</span><i style={{ width: `${Math.max(4, (card.invoiceCents / Math.max(1, overview.summary.invoiceCents)) * 100)}%` }} /><b>{fmt(card.invoiceCents / 100)} · cashback {fmt(card.estimatedCashbackCents / 100)}</b></div>)}</div></article>
+        <article className="panel"><div className="chart-head"><h3>Evolucao mensal</h3><strong>{fmt(overview.summary.invoiceCents / 100)}</strong></div><div className="month-bars labeled dashboard-bars">{overview.monthlyHistory.length ? overview.monthlyHistory.map((item) => <div key={item.month}><i style={{ height: `${Math.max(6, (item.invoiceCents / maxMonth) * 100)}%` }} /><span>{item.month.slice(5)}</span><b>{fmt(item.invoiceCents / 100)}</b></div>) : <p className="empty-state">Sem dados para grafico.</p>}</div></article>
+      </section>
+      <DataTable headers={["Fatura", "Data", "Cartao", "Descricao", "Parcela", "Valor"]} rows={overview.purchases.map((purchase) => [purchase.statementMonth, fmtDate(purchase.date), purchase.cardName, purchase.description, purchase.installmentNumber ? `${purchase.installmentNumber}/${purchase.totalInstallments}` : "1/1", fmt(purchase.amountCents / 100)])} />
+      <DataTable headers={["Data", "Cartao", "Movimentacao", "Competencia", "Valor"]} rows={overview.movements.map((movement) => [fmtDate(movement.date), movement.cardName, movement.description, movement.competenceMonth, fmt(movement.amountCents / 100)])} />
+      <DataTable headers={["Cartao", "Pagamento de fatura", "Cashback real", "Cashback estimado"]} rows={overview.cards.map((card) => [card.name, fmt(card.paymentCents / 100), fmt(card.confirmedCashbackCents / 100), fmt(card.estimatedCashbackCents / 100)])} />
+    </>
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function CardsView() {
   const invoice = cardRows.reduce((sum, row) => sum + row.value, 0);
   const reserved = cardRows.filter((row) => row.reserved).reduce((sum, row) => sum + row.value, 0);
