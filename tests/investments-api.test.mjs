@@ -38,6 +38,15 @@ async function getOverview(db, context, month = "all") {
   return response.json();
 }
 
+async function postInvestment(db, context, path, payload) {
+  const handler = createLocalApiHandler({ db, context });
+  return handler(new Request(`http://local${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  }));
+}
+
 function insertAsset(db, userId, { id, ticker, name, assetClass, currency, exchange = null, market = null }) {
   db.prepare(`
     insert into assets (id, user_id, ticker, name, asset_class, exchange, market, currency)
@@ -294,6 +303,268 @@ test("api investments isola ativos, precos, cambio e proventos por usuario", asy
     assert.equal(body.dividends.length, 0);
     assert.equal(body.exchangeRate.rateDecimal, null);
     assert.equal(body.totalsByCurrency.USD.currentValueCents, 0);
+  } finally {
+    cleanup();
+  }
+});
+
+test("api investments cadastra compra de ativo existente com transaction e investment_event", async () => {
+  const { db, cleanup } = await createDatabase();
+  try {
+    const context = { userId: "user_a" };
+    bootstrapLocalUser(db, context);
+    insertAsset(db, "user_a", { id: "mxrf11", ticker: "MXRF11", name: "MXRF11", assetClass: "FII", currency: "BRL" });
+
+    const response = await postInvestment(db, context, "/api/investments/operations", {
+      assetId: "mxrf11",
+      operationType: "COMPRA",
+      subtype: "APORTE",
+      quantity: "10",
+      unitPrice: "10",
+      totalAmount: "100,00",
+      date: "2026-08-10",
+      competenceMonth: "2026-08",
+    });
+
+    assert.equal(response.status, 201);
+    const tx = db.prepare("select nature, subtype, classification_status, transaction_status, amount_cents, currency, direction from transactions where user_id = 'user_a'").get();
+    const event = db.prepare("select quantity_decimal, unit_price_decimal, gross_amount_cents from investment_events where user_id = 'user_a'").get();
+    assert.deepEqual({ ...tx }, { nature: "INVESTIMENTO", subtype: "APORTE", classification_status: "CONFIRMADO", transaction_status: "ACTIVE", amount_cents: 10000, currency: "BRL", direction: "OUTFLOW" });
+    assert.deepEqual({ ...event }, { quantity_decimal: "10", unit_price_decimal: "10", gross_amount_cents: 10000 });
+  } finally {
+    cleanup();
+  }
+});
+
+test("api investments lista ativos do usuario como bases", async () => {
+  const { db, cleanup } = await createDatabase();
+  try {
+    const userA = { userId: "user_a" };
+    const userB = { userId: "user_b" };
+    bootstrapLocalUser(db, userA);
+    bootstrapLocalUser(db, userB);
+    insertAsset(db, "user_a", { id: "mxrf11", ticker: "MXRF11", name: "MXRF11", assetClass: "FII", currency: "BRL" });
+    insertAsset(db, "user_b", { id: "voo_b", ticker: "VOO", name: "Vanguard S&P 500", assetClass: "ETF_US", currency: "USD" });
+
+    const handler = createLocalApiHandler({ db, context: userA });
+    const response = await handler(new Request("http://local/api/investments/bases"));
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body.assets.map((asset) => asset.id), ["mxrf11"]);
+  } finally {
+    cleanup();
+  }
+});
+
+test("api investments cadastra novo ativo e compra na mesma transacao SQLite", async () => {
+  const { db, cleanup } = await createDatabase();
+  try {
+    const context = { userId: "user_a" };
+    bootstrapLocalUser(db, context);
+
+    const response = await postInvestment(db, context, "/api/investments/operations", {
+      asset: { ticker: "O", name: "Realty Income", assetClass: "REIT", exchange: "NYSE", market: "US", currency: "USD" },
+      operationType: "COMPRA",
+      subtype: "REINVESTIMENTO",
+      quantity: "1.5",
+      unitPrice: "50",
+      totalAmount: "75.00",
+      date: "2026-08-10",
+      competenceMonth: "2026-08",
+      exchangeRate: "5.2",
+    });
+
+    assert.equal(response.status, 201);
+    assert.equal(db.prepare("select count(*) as total from assets where user_id = 'user_a' and ticker = 'O'").get().total, 1);
+    assert.equal(db.prepare("select subtype from transactions where user_id = 'user_a'").get().subtype, "REINVESTIMENTO");
+    assert.equal(db.prepare("select exchange_rate_decimal from investment_events where user_id = 'user_a'").get().exchange_rate_decimal, "5.2");
+  } finally {
+    cleanup();
+  }
+});
+
+test("api investments rejeita compra com novo ativo invalido sem gravacao parcial", async () => {
+  const { db, cleanup } = await createDatabase();
+  try {
+    const context = { userId: "user_a" };
+    bootstrapLocalUser(db, context);
+
+    const response = await postInvestment(db, context, "/api/investments/operations", {
+      asset: { ticker: "BAD", name: "Ativo invalido", assetClass: "FII", currency: "EUR" },
+      operationType: "COMPRA",
+      subtype: "APORTE",
+      quantity: "10",
+      unitPrice: "10",
+      totalAmount: "100,00",
+      date: "2026-08-10",
+      competenceMonth: "2026-08",
+    });
+
+    assert.equal(response.status, 400);
+    assert.equal(db.prepare("select count(*) as total from assets where user_id = 'user_a'").get().total, 0);
+    assert.equal(db.prepare("select count(*) as total from transactions where user_id = 'user_a'").get().total, 0);
+  } finally {
+    cleanup();
+  }
+});
+
+test("api investments cadastra venda parcial e rejeita venda maior que posicao", async () => {
+  const { db, cleanup } = await createDatabase();
+  try {
+    const context = { userId: "user_a" };
+    bootstrapLocalUser(db, context);
+    insertAsset(db, "user_a", { id: "bbas3", ticker: "BBAS3", name: "Banco do Brasil", assetClass: "ACAO_BR", currency: "BRL" });
+    insertInvestment(db, "user_a", { id: "aporte_bbas3", assetId: "bbas3", amountCents: 100000, currency: "BRL", quantity: "100", unitPrice: "10" });
+
+    const sale = await postInvestment(db, context, "/api/investments/operations", {
+      assetId: "bbas3",
+      operationType: "VENDA",
+      quantity: "40",
+      unitPrice: "12",
+      totalAmount: "480,00",
+      date: "2026-08-12",
+      competenceMonth: "2026-08",
+    });
+    assert.equal(sale.status, 201);
+    const overview = await getOverview(db, context, "8");
+    assert.equal(overview.positions[0].quantityDecimal, "60");
+    assert.equal(overview.positions[0].investedCents, 60000);
+    assert.equal(overview.positions[0].averagePriceDecimal, "10");
+    assert.equal(db.prepare("select count(*) as total from transactions where nature = 'DESPESA'").get().total, 0);
+
+    const oversell = await postInvestment(db, context, "/api/investments/operations", {
+      assetId: "bbas3",
+      operationType: "VENDA",
+      quantity: "61",
+      unitPrice: "12",
+      totalAmount: "732,00",
+      date: "2026-08-13",
+      competenceMonth: "2026-08",
+    });
+    assert.equal(oversell.status, 400);
+    assert.equal(db.prepare("select count(*) as total from investment_events where user_id = 'user_a'").get().total, 2);
+  } finally {
+    cleanup();
+  }
+});
+
+test("api investments venda total zera posicao sem custo residual", async () => {
+  const { db, cleanup } = await createDatabase();
+  try {
+    const context = { userId: "user_a" };
+    bootstrapLocalUser(db, context);
+    insertAsset(db, "user_a", { id: "fracao", ticker: "FRAC11", name: "Ativo fracionario", assetClass: "FII", currency: "BRL" });
+    insertInvestment(db, "user_a", { id: "aporte_fracao", assetId: "fracao", amountCents: 10000, currency: "BRL", quantity: "3", unitPrice: "33.33333333" });
+
+    const sale = await postInvestment(db, context, "/api/investments/operations", {
+      assetId: "fracao",
+      operationType: "VENDA",
+      quantity: "3",
+      unitPrice: "35",
+      totalAmount: "105,00",
+      date: "2026-08-12",
+      competenceMonth: "2026-08",
+    });
+    assert.equal(sale.status, 201);
+
+    const overview = await getOverview(db, context, "8");
+    assert.equal(overview.positions.length, 0);
+    assert.equal(overview.totalsByCurrency.BRL.investedCents, 0);
+  } finally {
+    cleanup();
+  }
+});
+
+test("api investments rejeita data impossivel e valor total zero", async () => {
+  const { db, cleanup } = await createDatabase();
+  try {
+    const context = { userId: "user_a" };
+    bootstrapLocalUser(db, context);
+    insertAsset(db, "user_a", { id: "mxrf11", ticker: "MXRF11", name: "MXRF11", assetClass: "FII", currency: "BRL" });
+
+    const impossibleDate = await postInvestment(db, context, "/api/investments/operations", {
+      assetId: "mxrf11",
+      operationType: "COMPRA",
+      subtype: "APORTE",
+      quantity: "1",
+      unitPrice: "10",
+      totalAmount: "10,00",
+      date: "2026-02-31",
+      competenceMonth: "2026-02",
+    });
+    assert.equal(impossibleDate.status, 400);
+
+    const zeroAmount = await postInvestment(db, context, "/api/investments/operations", {
+      assetId: "mxrf11",
+      operationType: "COMPRA",
+      subtype: "APORTE",
+      quantity: "1",
+      unitPrice: "10",
+      totalAmount: "0,00",
+      date: "2026-02-28",
+      competenceMonth: "2026-02",
+    });
+    assert.equal(zeroAmount.status, 400);
+    assert.equal(db.prepare("select count(*) as total from transactions where user_id = 'user_a'").get().total, 0);
+  } finally {
+    cleanup();
+  }
+});
+
+test("api investments cadastra preco manual e rejeita moeda diferente do ativo", async () => {
+  const { db, cleanup } = await createDatabase();
+  try {
+    const context = { userId: "user_a" };
+    bootstrapLocalUser(db, context);
+    insertAsset(db, "user_a", { id: "voo", ticker: "VOO", name: "Vanguard S&P 500", assetClass: "ETF_US", currency: "USD" });
+
+    const ok = await postInvestment(db, context, "/api/investments/prices", { assetId: "voo", price: "410.25", currency: "USD", quotedAt: "2026-08-20T10:00:00.000Z" });
+    assert.equal(ok.status, 201);
+    assert.equal(db.prepare("select price_decimal from asset_prices where user_id = 'user_a'").get().price_decimal, "410.25");
+
+    const mismatch = await postInvestment(db, context, "/api/investments/prices", { assetId: "voo", price: "410.25", currency: "BRL", quotedAt: "2026-08-20T10:00:00.000Z" });
+    assert.equal(mismatch.status, 400);
+    const impossibleDate = await postInvestment(db, context, "/api/investments/prices", { assetId: "voo", price: "410.25", currency: "USD", quotedAt: "2026-02-31T10:00:00.000Z" });
+    assert.equal(impossibleDate.status, 400);
+    assert.equal(db.prepare("select count(*) as total from asset_prices where user_id = 'user_a'").get().total, 1);
+  } finally {
+    cleanup();
+  }
+});
+
+test("api investments cadastra cambio USD/BRL e rejeita user_id e cross-user", async () => {
+  const { db, cleanup } = await createDatabase();
+  try {
+    const userA = { userId: "user_a" };
+    const userB = { userId: "user_b" };
+    bootstrapLocalUser(db, userA);
+    bootstrapLocalUser(db, userB);
+    insertAsset(db, "user_b", { id: "asset_b", ticker: "B", name: "Outro ativo", assetClass: "REIT", currency: "USD" });
+
+    const exchange = await postInvestment(db, userA, "/api/investments/exchange-rates", { baseCurrency: "USD", quoteCurrency: "BRL", rate: "5.4", referenceDate: "2026-08-20" });
+    assert.equal(exchange.status, 201);
+    assert.equal(db.prepare("select rate_decimal from exchange_rates where user_id = 'user_a'").get().rate_decimal, "5.4");
+
+    const userIdPayload = await postInvestment(db, userA, "/api/investments/exchange-rates", { user_id: "user_b", baseCurrency: "USD", quoteCurrency: "BRL", rate: "5.4", referenceDate: "2026-08-20" });
+    assert.equal(userIdPayload.status, 400);
+    const invalidPair = await postInvestment(db, userA, "/api/investments/exchange-rates", { baseCurrency: "EUR", quoteCurrency: "BRL", rate: "5.4", referenceDate: "2026-08-20" });
+    assert.equal(invalidPair.status, 400);
+    const zeroRate = await postInvestment(db, userA, "/api/investments/exchange-rates", { baseCurrency: "USD", quoteCurrency: "BRL", rate: "0", referenceDate: "2026-08-20" });
+    assert.equal(zeroRate.status, 400);
+
+    const crossUser = await postInvestment(db, userA, "/api/investments/operations", {
+      assetId: "asset_b",
+      operationType: "COMPRA",
+      subtype: "APORTE",
+      quantity: "1",
+      unitPrice: "10",
+      totalAmount: "10.00",
+      date: "2026-08-10",
+      competenceMonth: "2026-08",
+    });
+    assert.equal(crossUser.status, 400);
+    assert.equal(db.prepare("select count(*) as total from investment_events where user_id = 'user_a'").get().total, 0);
   } finally {
     cleanup();
   }

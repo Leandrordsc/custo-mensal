@@ -107,6 +107,29 @@ type CardOverview = {
   movements: { transactionId: string; cardId: string; cardName: string; date: string; competenceMonth: string; description: string; amountCents: number }[];
   hasPurchases: boolean;
 };
+type InvestmentAssetOption = { id: string; ticker: string | null; name: string; assetClass: string; exchange: string | null; market: string | null; currency: string };
+type InvestmentBases = { assets: InvestmentAssetOption[] };
+type InvestmentOperationForm = {
+  assetMode: "existente" | "novo";
+  assetId: string;
+  operationType: "COMPRA" | "VENDA";
+  subtype: "APORTE" | "REINVESTIMENTO";
+  ticker: string;
+  name: string;
+  assetClass: string;
+  exchange: string;
+  market: string;
+  currency: "BRL" | "USD";
+  quantity: string;
+  unitPrice: string;
+  totalAmount: string;
+  date: string;
+  competenceMonth: string;
+  exchangeRate: string;
+  notes: string;
+};
+type InvestmentPriceForm = { assetId: string; price: string; currency: "BRL" | "USD"; quotedAt: string };
+type InvestmentExchangeForm = { rate: string; referenceDate: string };
 
 const emptyDashboardOverview: DashboardOverview = {
   summary: {
@@ -167,6 +190,38 @@ const emptyExpenseForm = (year: string, month: number): ExpenseFormState => ({
   classificationStatus: "CONFIRMADO",
   isInstallment: false,
   installments: 1,
+});
+
+const emptyInvestmentOperationForm = (year: string): InvestmentOperationForm => ({
+  assetMode: "existente",
+  assetId: "",
+  operationType: "COMPRA",
+  subtype: "APORTE",
+  ticker: "",
+  name: "",
+  assetClass: "FII",
+  exchange: "B3",
+  market: "BR",
+  currency: "BRL",
+  quantity: "",
+  unitPrice: "",
+  totalAmount: "",
+  date: `${year}-01-01`,
+  competenceMonth: `${year}-01`,
+  exchangeRate: "",
+  notes: "",
+});
+
+const emptyInvestmentPriceForm = (): InvestmentPriceForm => ({
+  assetId: "",
+  price: "",
+  currency: "BRL",
+  quotedAt: new Date().toISOString().slice(0, 16),
+});
+
+const emptyInvestmentExchangeForm = (): InvestmentExchangeForm => ({
+  rate: "",
+  referenceDate: new Date().toISOString().slice(0, 10),
 });
 
 export default function Home() {
@@ -574,18 +629,34 @@ function CardsView() {
 
 function InvestmentsConnectedView({ year }: { year: string }) {
   const [month, setMonth] = useState<string>("all");
+  const [bases, setBases] = useState<InvestmentBases>({ assets: [] });
   const [overview, setOverview] = useState<InvestmentOverview>(emptyInvestmentOverview());
+  const [operationForm, setOperationForm] = useState<InvestmentOperationForm>(() => emptyInvestmentOperationForm(year));
+  const [priceForm, setPriceForm] = useState<InvestmentPriceForm>(() => emptyInvestmentPriceForm());
+  const [exchangeForm, setExchangeForm] = useState<InvestmentExchangeForm>(() => emptyInvestmentExchangeForm());
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const overviewBrl = totalForCurrency(overview, "BRL");
   const overviewUsd = totalForCurrency(overview, "USD");
+  const selectedPriceAsset = bases.assets.find((asset) => asset.id === priceForm.assetId);
+  const selectedOperationAsset = bases.assets.find((asset) => asset.id === operationForm.assetId);
+  const operationCurrency = operationForm.assetMode === "novo" ? operationForm.currency : (selectedOperationAsset?.currency as "BRL" | "USD" | undefined) ?? "BRL";
 
   const loadInvestments = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const nextOverview = assertInvestmentOverview(await readJson(await fetch(`${localApiBaseUrl}/api/investments/overview?year=${year}&month=${month}`)));
+      const [basesResponse, overviewResponse] = await Promise.all([
+        fetch(`${localApiBaseUrl}/api/investments/bases`),
+        fetch(`${localApiBaseUrl}/api/investments/overview?year=${year}&month=${month}`),
+      ]);
+      const nextBases = await readJson(basesResponse) as InvestmentBases;
+      const nextOverview = assertInvestmentOverview(await readJson(overviewResponse));
+      setBases(nextBases);
       setOverview(nextOverview);
+      setOperationForm((current) => ({ ...current, assetId: current.assetId || nextBases.assets[0]?.id || "" }));
+      setPriceForm((current) => ({ ...current, assetId: current.assetId || nextBases.assets[0]?.id || "", currency: (nextBases.assets.find((asset) => asset.id === (current.assetId || nextBases.assets[0]?.id))?.currency as "BRL" | "USD" | undefined) ?? current.currency }));
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Nao foi possivel carregar ativos.");
       setOverview(emptyInvestmentOverview());
@@ -598,6 +669,71 @@ function InvestmentsConnectedView({ year }: { year: string }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadInvestments();
   }, [loadInvestments]);
+
+  async function submitOperation(event: FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      const payload = {
+        assetId: operationForm.assetMode === "existente" ? operationForm.assetId : null,
+        asset: operationForm.assetMode === "novo" ? {
+          ticker: operationForm.ticker,
+          name: operationForm.name,
+          assetClass: operationForm.assetClass,
+          exchange: operationForm.exchange,
+          market: operationForm.market,
+          currency: operationForm.currency,
+        } : null,
+        operationType: operationForm.operationType,
+        subtype: operationForm.subtype,
+        quantity: operationForm.quantity,
+        unitPrice: operationForm.unitPrice,
+        totalAmount: operationForm.totalAmount,
+        date: operationForm.date,
+        competenceMonth: operationForm.competenceMonth,
+        exchangeRate: operationForm.exchangeRate,
+        notes: operationForm.notes,
+      };
+      await readJson(await fetch(`${localApiBaseUrl}/api/investments/operations`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) }));
+      setOperationForm(emptyInvestmentOperationForm(year));
+      await loadInvestments();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Nao foi possivel salvar operacao.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function submitPrice(event: FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await readJson(await fetch(`${localApiBaseUrl}/api/investments/prices`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...priceForm, quotedAt: new Date(priceForm.quotedAt).toISOString(), provider: "manual" }) }));
+      setPriceForm(emptyInvestmentPriceForm());
+      await loadInvestments();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Nao foi possivel salvar preco.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function submitExchange(event: FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await readJson(await fetch(`${localApiBaseUrl}/api/investments/exchange-rates`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ baseCurrency: "USD", quoteCurrency: "BRL", rate: exchangeForm.rate, referenceDate: exchangeForm.referenceDate, provider: "manual" }) }));
+      setExchangeForm(emptyInvestmentExchangeForm());
+      await loadInvestments();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Nao foi possivel salvar cambio.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <>
@@ -620,6 +756,51 @@ function InvestmentsConnectedView({ year }: { year: string }) {
         <Kpi title="Proventos USD" value={fmtCurrency(overviewUsd.dividendsCents / 100, "USD")} tone="amber" />
       </section>
       {overview.hasPendingConversion && <p className="empty-state">Consolidado BRL parcial: existem valores em moeda original sem conversao disponivel.</p>}
+      <section className="split wide-left">
+        <article className="panel">
+          <div className="chart-head"><h3>Operacao manual</h3><strong>Compra ou venda</strong></div>
+          <form className="expense-form" onSubmit={(event) => void submitOperation(event)}>
+            <label>Tipo<select value={operationForm.operationType} onChange={(event) => setOperationForm({ ...operationForm, operationType: event.target.value as "COMPRA" | "VENDA" })}><option value="COMPRA">Compra</option><option value="VENDA">Venda</option></select></label>
+            <label>Ativo<select value={operationForm.assetMode} onChange={(event) => setOperationForm({ ...operationForm, assetMode: event.target.value as "existente" | "novo" })}><option value="existente">Existente</option><option value="novo">Novo ativo</option></select></label>
+            {operationForm.assetMode === "existente" ? <label>Selecionar<select value={operationForm.assetId} onChange={(event) => setOperationForm({ ...operationForm, assetId: event.target.value })} required><option value="">Selecione</option>{bases.assets.map((asset) => <option key={asset.id} value={asset.id}>{asset.ticker ?? asset.name} - {asset.currency}</option>)}</select></label> : <>
+              <label>Ticker<input value={operationForm.ticker} onChange={(event) => setOperationForm({ ...operationForm, ticker: event.target.value })} /></label>
+              <label>Nome<input value={operationForm.name} onChange={(event) => setOperationForm({ ...operationForm, name: event.target.value })} required /></label>
+              <label>Classe<input value={operationForm.assetClass} onChange={(event) => setOperationForm({ ...operationForm, assetClass: event.target.value })} required /></label>
+              <label>Bolsa<input value={operationForm.exchange} onChange={(event) => setOperationForm({ ...operationForm, exchange: event.target.value })} /></label>
+              <label>Mercado<input value={operationForm.market} onChange={(event) => setOperationForm({ ...operationForm, market: event.target.value })} /></label>
+              <label>Moeda<select value={operationForm.currency} onChange={(event) => setOperationForm({ ...operationForm, currency: event.target.value as "BRL" | "USD" })}><option value="BRL">BRL</option><option value="USD">USD</option></select></label>
+            </>}
+            {operationForm.operationType === "COMPRA" && <label>Subtipo<select value={operationForm.subtype} onChange={(event) => setOperationForm({ ...operationForm, subtype: event.target.value as "APORTE" | "REINVESTIMENTO" })}><option value="APORTE">Aporte</option><option value="REINVESTIMENTO">Reinvestimento</option></select></label>}
+            <label>Quantidade<input value={operationForm.quantity} onChange={(event) => setOperationForm({ ...operationForm, quantity: event.target.value })} placeholder="10,5" required /></label>
+            <label>Preco unitario<span className="money-input"><b>{operationCurrency === "USD" ? "US$" : "R$"}</b><input inputMode="decimal" value={operationForm.unitPrice} onChange={(event) => setOperationForm({ ...operationForm, unitPrice: event.target.value })} placeholder="100,00" required /></span></label>
+            <label>Valor total<span className="money-input"><b>{operationCurrency === "USD" ? "US$" : "R$"}</b><input inputMode="decimal" value={operationForm.totalAmount} onChange={(event) => setOperationForm({ ...operationForm, totalAmount: event.target.value })} placeholder="1000,00" required /></span></label>
+            <label>Data<input type="date" value={operationForm.date} onChange={(event) => setOperationForm({ ...operationForm, date: event.target.value })} required /></label>
+            <label>Competencia<input value={operationForm.competenceMonth} onChange={(event) => setOperationForm({ ...operationForm, competenceMonth: event.target.value })} placeholder="2026-08" required /></label>
+            <label>Cambio usado<span className="money-input"><b>R$</b><input inputMode="decimal" value={operationForm.exchangeRate} onChange={(event) => setOperationForm({ ...operationForm, exchangeRate: event.target.value })} placeholder="opcional" /></span></label>
+            <label>Observacao<input value={operationForm.notes} onChange={(event) => setOperationForm({ ...operationForm, notes: event.target.value })} /></label>
+            <button className="primary" disabled={saving}>{saving ? "Salvando..." : "Cadastrar operacao"}</button>
+          </form>
+        </article>
+        <article className="panel">
+          <div className="chart-head"><h3>Dados de mercado</h3><strong>Preco e cambio</strong></div>
+          <form className="expense-form" onSubmit={(event) => void submitPrice(event)}>
+            <label>Ativo<select value={priceForm.assetId} onChange={(event) => {
+              const asset = bases.assets.find((item) => item.id === event.target.value);
+              setPriceForm({ ...priceForm, assetId: event.target.value, currency: (asset?.currency as "BRL" | "USD" | undefined) ?? priceForm.currency });
+            }} required><option value="">Selecione</option>{bases.assets.map((asset) => <option key={asset.id} value={asset.id}>{asset.ticker ?? asset.name} - {asset.currency}</option>)}</select></label>
+            <label>Moeda<input value={selectedPriceAsset?.currency ?? priceForm.currency} readOnly /></label>
+            <label>Preco atual<span className="money-input"><b>{(selectedPriceAsset?.currency ?? priceForm.currency) === "USD" ? "US$" : "R$"}</b><input inputMode="decimal" value={priceForm.price} onChange={(event) => setPriceForm({ ...priceForm, price: event.target.value })} required /></span></label>
+            <label>Data/hora<input type="datetime-local" value={priceForm.quotedAt} onChange={(event) => setPriceForm({ ...priceForm, quotedAt: event.target.value })} required /></label>
+            <button className="primary" disabled={saving || bases.assets.length === 0}>{saving ? "Salvando..." : "Salvar preco manual"}</button>
+          </form>
+          <form className="expense-form" onSubmit={(event) => void submitExchange(event)}>
+            <label>Par<input value="USD/BRL" readOnly /></label>
+            <label>Taxa<span className="money-input"><b>R$</b><input inputMode="decimal" value={exchangeForm.rate} onChange={(event) => setExchangeForm({ ...exchangeForm, rate: event.target.value })} placeholder="5,40" required /></span></label>
+            <label>Referencia<input type="date" value={exchangeForm.referenceDate} onChange={(event) => setExchangeForm({ ...exchangeForm, referenceDate: event.target.value })} required /></label>
+            <button className="primary" disabled={saving}>{saving ? "Salvando..." : "Salvar cambio USD/BRL"}</button>
+          </form>
+        </article>
+      </section>
       <section className="split wide-left">
         <DataTable headers={["Ticker", "Classe", "Moeda", "Qtd", "Preco medio", "Preco atual", "Valor atual", "Proventos"]} rows={overview.positions.map((asset) => [asset.ticker ?? asset.name, asset.assetClass, asset.currency, asset.quantityDecimal, asset.averagePriceDecimal ? fmtCurrency(Number(asset.averagePriceDecimal), asset.currency) : "-", asset.lastPriceDecimal ? fmtCurrency(Number(asset.lastPriceDecimal), asset.currency) : "-", asset.currentValueCents === null ? "Preco pendente" : fmtCurrency(asset.currentValueCents / 100, asset.currency), fmtCurrency(dividendTotalForPosition(overview, asset.assetId, asset.currency) / 100, asset.currency)])} />
         <DataTable headers={["Data", "Ativo", "Moeda", "Valor", "Valor BRL"]} rows={overview.dividends.map((dividend) => [fmtDate(dividend.paymentDate), dividend.ticker ?? dividend.name ?? dividend.description, dividend.currency, fmtCurrency(dividend.amountCents / 100, dividend.currency), dividend.amountBrlCents === null ? "Cambio pendente" : fmt(dividend.amountBrlCents / 100)])} />

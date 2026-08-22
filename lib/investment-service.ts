@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import { requireAuthenticatedUser, type AuthenticatedUserContext } from "./auth-context.ts";
+import { createId, normalizeAssetPrice, normalizeExchangeRate, normalizeInvestmentOperation, nowIso, type AssetPriceInput, type ExchangeRateInput, type InvestmentOperationInput, type NormalizedInvestmentOperation } from "./investment-domain.ts";
 
 export type InvestmentPeriod = {
   fromMonth: string;
@@ -90,6 +91,26 @@ type PositionRow = {
   quantity_decimal: string | null;
 };
 
+type PositionEventRow = PositionRow & {
+  transaction_id: string | null;
+  subtype: "APORTE" | "REINVESTIMENTO" | "AJUSTE" | null;
+  amount_cents: number | null;
+  event_quantity_decimal: string | null;
+  competence_month: string | null;
+};
+
+export type InvestmentBases = {
+  assets: {
+    id: string;
+    ticker: string | null;
+    name: string;
+    assetClass: string;
+    exchange: string | null;
+    market: string | null;
+    currency: string;
+  }[];
+};
+
 type PriceRow = {
   asset_id: string;
   price_decimal: string;
@@ -115,6 +136,18 @@ type DividendRow = {
   description: string;
   amount_cents: number;
   currency: string;
+};
+
+type PositionAccumulator = {
+  asset_id: string;
+  ticker: string | null;
+  name: string;
+  asset_class: string;
+  exchange: string | null;
+  market: string | null;
+  currency: string;
+  investedCents: number;
+  quantity: number;
 };
 
 export class InvestmentService {
@@ -156,8 +189,78 @@ export class InvestmentService {
     };
   }
 
+  listBases(context: AuthenticatedUserContext): InvestmentBases {
+    const { userId } = requireAuthenticatedUser(context);
+    return {
+      assets: this.db.prepare(`
+        select id, ticker, name, asset_class as assetClass, exchange, market, currency
+        from assets
+        where user_id = ?
+        order by currency, asset_class, coalesce(ticker, name)
+      `).all(userId) as InvestmentBases["assets"],
+    };
+  }
+
+  createInvestmentOperation(context: AuthenticatedUserContext, input: InvestmentOperationInput) {
+    const { userId } = requireAuthenticatedUser(context);
+    const operation = normalizeInvestmentOperation(input);
+    let assetId: string | null = operation.assetId;
+    const transactionId = createId("tx");
+    const eventId = createId("investment_event");
+
+    this.transaction(() => {
+      if (operation.asset) {
+        assetId = createId("asset");
+        this.db.prepare(`
+          insert into assets (id, user_id, ticker, name, asset_class, exchange, market, currency)
+          values (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(assetId, userId, operation.asset.ticker, operation.asset.name, operation.asset.assetClass, operation.asset.exchange, operation.asset.market, operation.asset.currency);
+      }
+
+      const asset = this.getAssetForUser(userId, assetId);
+      if (operation.operationType === "VENDA") {
+        this.assertAvailableQuantity(userId, asset.id, operation.quantityDecimal, operation.competenceMonth);
+      }
+      insertInvestmentOperation(this.db, userId, transactionId, eventId, asset.id, asset.currency, operation);
+    });
+
+    return {
+      transactionId,
+      investmentEventId: eventId,
+      assetId: assetId!,
+    };
+  }
+
+  createAssetPrice(context: AuthenticatedUserContext, input: AssetPriceInput) {
+    const { userId } = requireAuthenticatedUser(context);
+    const price = normalizeAssetPrice(input);
+    const asset = this.getAssetForUser(userId, price.assetId);
+    if (asset.currency !== price.currency) {
+      throw new Error("Moeda do preco deve ser igual a moeda do ativo.");
+    }
+    const id = createId("asset_price");
+    const fetchedAt = nowIso();
+    this.db.prepare(`
+      insert into asset_prices (id, user_id, asset_id, price_decimal, currency, quoted_at, provider, fetched_at, is_stale)
+      values (?, ?, ?, ?, ?, ?, ?, ?, 0)
+    `).run(id, userId, asset.id, price.priceDecimal, price.currency, price.quotedAt, price.provider, fetchedAt);
+    return { id, assetId: asset.id };
+  }
+
+  createExchangeRate(context: AuthenticatedUserContext, input: ExchangeRateInput) {
+    const { userId } = requireAuthenticatedUser(context);
+    const exchangeRate = normalizeExchangeRate(input);
+    const id = createId("exchange_rate");
+    const fetchedAt = nowIso();
+    this.db.prepare(`
+      insert into exchange_rates (id, user_id, base_currency, quote_currency, rate_decimal, reference_date, provider, fetched_at, is_stale)
+      values (?, ?, ?, ?, ?, ?, ?, ?, 0)
+    `).run(id, userId, exchangeRate.baseCurrency, exchangeRate.quoteCurrency, exchangeRate.rateDecimal, exchangeRate.referenceDate, exchangeRate.provider, fetchedAt);
+    return { id };
+  }
+
   private listPositions(userId: string, period: InvestmentPeriod) {
-    return this.db.prepare(`
+    const rows = this.db.prepare(`
       select
         a.id as asset_id,
         a.ticker,
@@ -166,8 +269,11 @@ export class InvestmentService {
         a.exchange,
         a.market,
         a.currency,
-        coalesce(sum(case when t.id is not null then t.amount_cents else 0 end), 0) as invested_cents,
-        coalesce(sum(case when t.id is not null then cast(coalesce(ie.quantity_decimal, '0') as real) else 0 end), 0) as quantity_decimal
+        t.id as transaction_id,
+        t.subtype,
+        t.amount_cents,
+        ie.quantity_decimal as event_quantity_decimal,
+        t.competence_month
       from assets a
       left join investment_events ie
         on ie.user_id = a.user_id
@@ -178,13 +284,92 @@ export class InvestmentService {
        and t.classification_status = 'CONFIRMADO'
        and t.transaction_status = 'ACTIVE'
        and t.nature = 'INVESTIMENTO'
-       and t.subtype in ('APORTE', 'REINVESTIMENTO')
+       and t.subtype in ('APORTE', 'REINVESTIMENTO', 'AJUSTE')
        and t.competence_month <= ?
       where a.user_id = ?
-      group by a.id, a.ticker, a.name, a.asset_class, a.exchange, a.market, a.currency
-      having invested_cents > 0 or cast(quantity_decimal as real) > 0
-      order by a.currency, a.asset_class, coalesce(a.ticker, a.name)
-    `).all(period.toMonth, userId) as PositionRow[];
+      order by a.currency, a.asset_class, coalesce(a.ticker, a.name), t.competence_month, t.date, t.id
+    `).all(period.toMonth, userId) as PositionEventRow[];
+
+    const byAsset = new Map<string, PositionAccumulator>();
+    for (const row of rows) {
+      const accumulator = byAsset.get(row.asset_id) ?? {
+        asset_id: row.asset_id,
+        ticker: row.ticker,
+        name: row.name,
+        asset_class: row.asset_class,
+        exchange: row.exchange,
+        market: row.market,
+        currency: row.currency,
+        investedCents: 0,
+        quantity: 0,
+      };
+
+      if (row.transaction_id) {
+        applyPositionEvent(accumulator, row);
+      }
+      byAsset.set(row.asset_id, accumulator);
+    }
+
+    return Array.from(byAsset.values())
+      .filter((item) => item.investedCents > 0 || item.quantity > 0)
+      .map((item) => ({
+        asset_id: item.asset_id,
+        ticker: item.ticker,
+        name: item.name,
+        asset_class: item.asset_class,
+        exchange: item.exchange,
+        market: item.market,
+        currency: item.currency,
+        invested_cents: item.investedCents,
+        quantity_decimal: formatDecimal(item.quantity),
+      }));
+  }
+
+  private getAssetForUser(userId: string, assetId: string | null) {
+    if (!assetId) {
+      throw new Error("Ativo obrigatorio.");
+    }
+    const asset = this.db.prepare(`
+      select id, currency
+      from assets
+      where user_id = ?
+        and id = ?
+    `).get(userId, assetId) as { id: string; currency: string } | undefined;
+    if (!asset) {
+      throw new Error("Ativo nao pertence ao usuario autenticado.");
+    }
+    return asset;
+  }
+
+  private assertAvailableQuantity(userId: string, assetId: string, requestedQuantity: string, competenceMonth: string) {
+    const row = this.db.prepare(`
+      select coalesce(sum(cast(coalesce(ie.quantity_decimal, '0') as real)), 0) as quantity
+      from investment_events ie
+      join transactions t
+        on t.user_id = ie.user_id
+       and t.id = ie.transaction_id
+       and t.classification_status = 'CONFIRMADO'
+       and t.transaction_status = 'ACTIVE'
+       and t.nature = 'INVESTIMENTO'
+       and t.subtype in ('APORTE', 'REINVESTIMENTO', 'AJUSTE')
+       and t.competence_month <= ?
+      where ie.user_id = ?
+        and ie.asset_id = ?
+    `).get(competenceMonth, userId, assetId) as { quantity: number } | undefined;
+    if (Number(row?.quantity ?? 0) + 1e-8 < Number(requestedQuantity)) {
+      throw new Error("Venda maior que a quantidade disponivel.");
+    }
+  }
+
+  private transaction(work: () => void) {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      work();
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   private latestPrice(userId: string, assetId: string, currency: string, period: InvestmentPeriod) {
@@ -273,6 +458,59 @@ export class InvestmentService {
       amountBrlCents,
     };
   }
+}
+
+function applyPositionEvent(position: PositionAccumulator, row: PositionEventRow) {
+  const quantity = Number(row.event_quantity_decimal ?? 0);
+  if (!Number.isFinite(quantity) || quantity === 0) {
+    return;
+  }
+
+  if (row.subtype === "AJUSTE" && quantity < 0) {
+    const quantitySold = Math.abs(quantity);
+    const averageCostCents = position.quantity > 0 ? position.investedCents / position.quantity : 0;
+    position.quantity = Math.max(0, position.quantity - quantitySold);
+    position.investedCents = Math.max(0, position.investedCents - Math.round(averageCostCents * quantitySold));
+    if (position.quantity <= 1e-8) {
+      position.quantity = 0;
+      position.investedCents = 0;
+    }
+    return;
+  }
+
+  if (row.subtype === "APORTE" || row.subtype === "REINVESTIMENTO") {
+    position.quantity += quantity;
+    position.investedCents += Number(row.amount_cents ?? 0);
+  }
+}
+
+function insertInvestmentOperation(db: DatabaseSync, userId: string, transactionId: string, eventId: string, assetId: string, currency: string, operation: NormalizedInvestmentOperation) {
+  const timestamp = nowIso();
+  const signedQuantity = operation.operationType === "VENDA" ? `-${operation.quantityDecimal}` : operation.quantityDecimal;
+  db.prepare(`
+    insert into transactions (
+      id, user_id, nature, subtype, origin, classification_status, transaction_status,
+      asset_id, date, competence_month, description, amount_cents, currency, direction, notes, created_at, updated_at
+    ) values (?, ?, 'INVESTIMENTO', ?, 'MANUAL', 'CONFIRMADO', 'ACTIVE', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    transactionId,
+    userId,
+    operation.subtype,
+    assetId,
+    operation.date,
+    operation.competenceMonth,
+    operation.operationType === "VENDA" ? "Venda manual de ativo" : "Compra manual de ativo",
+    operation.totalAmountCents,
+    currency,
+    operation.operationType === "VENDA" ? "INFLOW" : "OUTFLOW",
+    operation.notes,
+    timestamp,
+    timestamp,
+  );
+  db.prepare(`
+    insert into investment_events (id, user_id, transaction_id, asset_id, quantity_decimal, unit_price_decimal, exchange_rate_decimal, gross_amount_cents)
+    values (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(eventId, userId, transactionId, assetId, signedQuantity, operation.unitPriceDecimal, operation.exchangeRateDecimal, operation.totalAmountCents);
 }
 
 function mapPositionRow(row: PositionRow, price: PriceRow | undefined, exchangeRate: ExchangeRateRow | undefined, alerts: InvestmentAlert[]): InvestmentPosition {

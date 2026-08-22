@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { annualCostSheets, dividendTotals, getYearSheet, monthlyTotals, sum } from "../lib/finance-data.ts";
 import { resolveAssetPrice } from "../lib/price-service.ts";
@@ -101,4 +102,13 @@ test("server-renders a aplicacao financeira atual", async () => {
   assert.match(html, /Ativos e Proventos/);
   assert.match(html, /Dividendos 2026/);
   assert.doesNotMatch(html, /Your site is taking shape|Building your site/);
+});
+
+test("codigo renderizado contem controles de cadastro manual de ativos", () => {
+  const source = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+
+  assert.match(source, /Operacao manual/);
+  assert.match(source, /Cadastrar operacao/);
+  assert.match(source, /Salvar preco manual/);
+  assert.match(source, /Salvar cambio USD\/BRL/);
 });

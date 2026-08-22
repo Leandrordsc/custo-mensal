@@ -33,6 +33,9 @@ export function createLocalApiHandler({ db, context = getLocalAuthenticatedUser(
       if (request.method === "GET" && path === "/api/investments/overview") {
         return jsonResponse(investmentService.getOverview(context, parseDashboardPeriod(url)));
       }
+      if (request.method === "GET" && path === "/api/investments/bases") {
+        return jsonResponse(investmentService.listBases(context));
+      }
       if (request.method === "GET" && path === "/api/costs/bases") {
         return jsonResponse(service.listBases(context));
       }
@@ -51,6 +54,21 @@ export function createLocalApiHandler({ db, context = getLocalAuthenticatedUser(
         const body = await readBody(request);
         rejectUserId(body);
         return jsonResponse(service.createExpense(context, body), 201);
+      }
+      if (path === "/api/investments/operations" && request.method === "POST") {
+        const body = await readBody(request);
+        rejectUserId(body);
+        return jsonResponse(investmentService.createInvestmentOperation(context, body), 201);
+      }
+      if (path === "/api/investments/prices" && request.method === "POST") {
+        const body = await readBody(request);
+        rejectUserId(body);
+        return jsonResponse(investmentService.createAssetPrice(context, body), 201);
+      }
+      if (path === "/api/investments/exchange-rates" && request.method === "POST") {
+        const body = await readBody(request);
+        rejectUserId(body);
+        return jsonResponse(investmentService.createExchangeRate(context, body), 201);
       }
       if (expenseMatch && request.method === "PUT") {
         const body = await readBody(request);
