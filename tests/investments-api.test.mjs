@@ -58,11 +58,11 @@ function insertInvestment(db, userId, { id, assetId, amountCents, currency, quan
   `).run(id, userId, `${id}_tx`, assetId, quantity, unitPrice, grossAmountCents);
 }
 
-function insertPrice(db, userId, { id, assetId, price, currency, stale = 0, quotedAt = "2026-08-20T00:00:00.000Z" }) {
+function insertPrice(db, userId, { id, assetId, price, currency, stale = 0, quotedAt = "2026-08-20T00:00:00.000Z", fetchedAt = quotedAt }) {
   db.prepare(`
     insert into asset_prices (id, user_id, asset_id, price_decimal, currency, quoted_at, provider, fetched_at, is_stale)
     values (?, ?, ?, ?, ?, ?, 'manual', ?, ?)
-  `).run(id, userId, assetId, price, currency, quotedAt, quotedAt, stale);
+  `).run(id, userId, assetId, price, currency, quotedAt, fetchedAt, stale);
 }
 
 function insertExchange(db, userId, { id = "usd_brl", rate = "5.00", stale = 0, referenceDate = "2026-08-20" } = {}) {
@@ -85,6 +85,15 @@ function insertDividend(db, userId, { id, assetId, amountCents, currency, month 
   `).run(id, userId, `${id}_tx`, assetId);
 }
 
+function insertDividendTransactionOnly(db, userId, { id, assetId, amountCents, currency, month = "2026-08", date = "2026-08-25" }) {
+  db.prepare(`
+    insert into transactions (
+      id, user_id, nature, subtype, origin, classification_status, transaction_status,
+      asset_id, date, competence_month, description, amount_cents, currency, direction
+    ) values (?, ?, 'RECEITA', 'DIVIDENDO', 'IMPORTACAO', 'CONFIRMADO', 'ACTIVE', ?, ?, ?, 'Dividendo sem evento', ?, ?, 'INFLOW')
+  `).run(`${id}_tx`, userId, assetId, date, month, amountCents, currency);
+}
+
 test("api investments retorna vazio para usuario sem ativos", async () => {
   const { db, cleanup } = await createDatabase();
   try {
@@ -102,7 +111,25 @@ test("api investments retorna vazio para usuario sem ativos", async () => {
   }
 });
 
-test("api investments calcula ativo BRL, provento BRL e nao duplica dividend_events", async () => {
+test("api investments ignora ativo cadastrado sem posicao confirmada", async () => {
+  const { db, cleanup } = await createDatabase();
+  try {
+    const context = { userId: "user_a" };
+    bootstrapLocalUser(db, context);
+    insertAsset(db, "user_a", { id: "sem_posicao", ticker: "ZERO11", name: "Ativo sem posicao", assetClass: "FII", currency: "BRL" });
+    insertPrice(db, "user_a", { id: "price_zero", assetId: "sem_posicao", price: "10", currency: "BRL" });
+
+    const body = await getOverview(db, context, "8");
+
+    assert.equal(body.hasAssets, false);
+    assert.equal(body.positions.length, 0);
+    assert.equal(body.alerts.some((alert) => alert.assetId === "sem_posicao"), false);
+  } finally {
+    cleanup();
+  }
+});
+
+test("api investments calcula ativo BRL e usa data da transaction quando nao ha dividend_event", async () => {
   const { db, cleanup } = await createDatabase();
   try {
     const context = { userId: "user_a" };
@@ -111,13 +138,16 @@ test("api investments calcula ativo BRL, provento BRL e nao duplica dividend_eve
     insertInvestment(db, "user_a", { id: "aporte_mxrf", assetId: "mxrf11", amountCents: 100000, currency: "BRL", quantity: "100", unitPrice: "10" });
     insertInvestment(db, "user_a", { id: "aporte_futuro_mxrf", assetId: "mxrf11", amountCents: 999999, currency: "BRL", quantity: "999", unitPrice: "10.01", month: "2026-09" });
     insertPrice(db, "user_a", { id: "price_mxrf", assetId: "mxrf11", price: "11", currency: "BRL" });
+    insertPrice(db, "user_a", { id: "price_old_refetched_mxrf", assetId: "mxrf11", price: "8", currency: "BRL", quotedAt: "2026-08-01T00:00:00.000Z", fetchedAt: "2026-08-31T00:00:00.000Z" });
     insertPrice(db, "user_a", { id: "price_futura_mxrf", assetId: "mxrf11", price: "99", currency: "BRL", quotedAt: "2026-09-01T00:00:00.000Z" });
-    insertDividend(db, "user_a", { id: "div_mxrf", assetId: "mxrf11", amountCents: 1200, currency: "BRL" });
+    insertDividendTransactionOnly(db, "user_a", { id: "div_mxrf", assetId: "mxrf11", amountCents: 1200, currency: "BRL", date: "2026-08-24" });
 
     const body = await getOverview(db, context, "8");
 
     assert.equal(body.positions[0].quantityDecimal, "100");
     assert.equal(body.positions[0].currentValueCents, 110000);
+    assert.equal(body.positions[0].lastPriceDecimal, "11");
+    assert.equal(body.dividends[0].paymentDate, "2026-08-24");
     assert.equal(body.totalsByCurrency.BRL.investedCents, 100000);
     assert.equal(body.totalsByCurrency.BRL.currentValueCents, 110000);
     assert.equal(body.totalsByCurrency.BRL.dividendsCents, 1200);
@@ -165,12 +195,81 @@ test("api investments sinaliza cambio ausente e defasado para ativos USD", async
 
     const withoutRate = await getOverview(db, context, "8");
     assert.equal(withoutRate.hasPendingConversion, true);
+    assert.equal(withoutRate.consolidatedBrl.pendingInvestedCents, 40000);
     assert.equal(withoutRate.alerts.some((alert) => alert.type === "MISSING_EXCHANGE_RATE"), true);
 
     insertExchange(db, "user_a", { rate: "5.10", stale: 1 });
     const staleRate = await getOverview(db, context, "8");
     assert.equal(staleRate.exchangeRate.isStale, true);
     assert.equal(staleRate.alerts.some((alert) => alert.type === "STALE_EXCHANGE_RATE"), true);
+  } finally {
+    cleanup();
+  }
+});
+
+test("api investments sinaliza preco ausente, preco defasado e moeda sem conversao", async () => {
+  const { db, cleanup } = await createDatabase();
+  try {
+    const context = { userId: "user_a" };
+    bootstrapLocalUser(db, context);
+    insertAsset(db, "user_a", { id: "sem_preco", ticker: "SPRE11", name: "Sem preco", assetClass: "FII", currency: "BRL" });
+    insertInvestment(db, "user_a", { id: "aporte_sem_preco", assetId: "sem_preco", amountCents: 10000, currency: "BRL", quantity: "10", unitPrice: "10" });
+    insertAsset(db, "user_a", { id: "preco_defasado", ticker: "OLD11", name: "Preco defasado", assetClass: "FII", currency: "BRL" });
+    insertInvestment(db, "user_a", { id: "aporte_defasado", assetId: "preco_defasado", amountCents: 20000, currency: "BRL", quantity: "20", unitPrice: "10" });
+    insertPrice(db, "user_a", { id: "price_defasado", assetId: "preco_defasado", price: "9", currency: "BRL", stale: 1 });
+    insertAsset(db, "user_a", { id: "eur_asset", ticker: "EUR1", name: "Ativo EUR", assetClass: "OUTRO", currency: "EUR" });
+    insertInvestment(db, "user_a", { id: "aporte_eur", assetId: "eur_asset", amountCents: 30000, currency: "EUR", quantity: "3", unitPrice: "100" });
+    insertPrice(db, "user_a", { id: "price_eur", assetId: "eur_asset", price: "110", currency: "EUR" });
+
+    const body = await getOverview(db, context, "8");
+
+    assert.equal(body.alerts.some((alert) => alert.type === "MISSING_PRICE" && alert.assetId === "sem_preco"), true);
+    assert.equal(body.alerts.some((alert) => alert.type === "STALE_PRICE" && alert.assetId === "preco_defasado"), true);
+    assert.equal(body.alerts.some((alert) => alert.type === "UNSUPPORTED_CURRENCY" && alert.currency === "EUR"), true);
+    assert.equal(body.consolidatedBrl.pendingInvestedCents, 0);
+  } finally {
+    cleanup();
+  }
+});
+
+test("api investments usa ultimo dia real do mes ao selecionar preco", async () => {
+  const { db, cleanup } = await createDatabase();
+  try {
+    const context = { userId: "user_a" };
+    bootstrapLocalUser(db, context);
+    insertAsset(db, "user_a", { id: "bova11", ticker: "BOVA11", name: "BOVA11", assetClass: "ETF_BR", currency: "BRL", exchange: "B3", market: "BR" });
+    insertInvestment(db, "user_a", { id: "aporte_bova", assetId: "bova11", amountCents: 100000, currency: "BRL", quantity: "10", unitPrice: "100", month: "2026-02" });
+    insertPrice(db, "user_a", { id: "price_fev_bova", assetId: "bova11", price: "105", currency: "BRL", quotedAt: "2026-02-28T00:00:00.000Z" });
+    insertPrice(db, "user_a", { id: "price_mar_bova", assetId: "bova11", price: "130", currency: "BRL", quotedAt: "2026-03-01T00:00:00.000Z" });
+
+    const body = await getOverview(db, context, "2");
+
+    assert.equal(body.positions[0].lastPriceDecimal, "105");
+    assert.equal(body.positions[0].currentValueCents, 105000);
+  } finally {
+    cleanup();
+  }
+});
+
+test("api investments ignora transacoes nao confirmadas ou canceladas", async () => {
+  const { db, cleanup } = await createDatabase();
+  try {
+    const context = { userId: "user_a" };
+    bootstrapLocalUser(db, context);
+    insertAsset(db, "user_a", { id: "bbas3", ticker: "BBAS3", name: "Banco do Brasil", assetClass: "ACAO_BR", currency: "BRL", exchange: "B3", market: "BR" });
+    insertInvestment(db, "user_a", { id: "aporte_ok", assetId: "bbas3", amountCents: 10000, currency: "BRL", quantity: "10", unitPrice: "10" });
+    insertInvestment(db, "user_a", { id: "aporte_pendente", assetId: "bbas3", amountCents: 90000, currency: "BRL", quantity: "90", unitPrice: "10" });
+    db.prepare("update transactions set classification_status = 'PENDENTE_REVISAO' where id = 'aporte_pendente_tx'").run();
+    insertInvestment(db, "user_a", { id: "aporte_cancelado", assetId: "bbas3", amountCents: 80000, currency: "BRL", quantity: "80", unitPrice: "10" });
+    db.prepare("update transactions set transaction_status = 'CANCELADO', voided_at = '2026-08-12T00:00:00.000Z', voided_by = 'user_a' where id = 'aporte_cancelado_tx'").run();
+    insertDividend(db, "user_a", { id: "div_pendente", assetId: "bbas3", amountCents: 7000, currency: "BRL" });
+    db.prepare("update transactions set classification_status = 'PENDENTE_REVISAO' where id = 'div_pendente_tx'").run();
+
+    const body = await getOverview(db, context, "8");
+
+    assert.equal(body.positions[0].quantityDecimal, "10");
+    assert.equal(body.totalsByCurrency.BRL.investedCents, 10000);
+    assert.equal(body.totalsByCurrency.BRL.dividendsCents, 0);
   } finally {
     cleanup();
   }

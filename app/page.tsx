@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { allocation, annualCostSheets, cardRows, cardYield, dividends, dividendTotals, getYearSheet, hasDetailedExpenseRows, importIssues, monthlyTotals, months, sum } from "@/lib/finance-data";
+import { assertDashboardOverview, assertInvestmentOverview, dividendTotalForPosition, emptyInvestmentOverview, totalForCurrency, type DashboardOverview, type InvestmentOverview } from "@/lib/investment-view-model";
 
 const menu = ["Dashboard", "Custos", "Cartões", "Ativos e Proventos"];
 const fmt = (value: number) => value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -56,75 +57,6 @@ type ExpenseFormState = {
   classificationStatus: "CONFIRMADO" | "PENDENTE_REVISAO";
   isInstallment: boolean;
   installments: number;
-};
-type DashboardOverview = {
-  summary: {
-    livingCostCents: number;
-    cardPurchasesCents: number;
-    invoicePaymentsCents: number;
-    internalTransfersCents: number;
-    reserveTransfersCents: number;
-    contributionsCents: number;
-    reinvestmentsCents: number;
-    dividendsCents: number;
-    confirmedCashbackCents: number;
-    estimatedCashbackCents: number;
-    reserveEarningsCents: number;
-    pendingReviewCents: number;
-    rejectedCents: number;
-    ignoredCents: number;
-  };
-  monthlySeries: { month: string; livingCostCents: number; cardPurchasesCents: number; pendingReviewCents: number }[];
-  categories: { category: string; amountCents: number }[];
-  investments: InvestmentOverview;
-  transactionCount: number;
-  countableTransactionCount: number;
-  hasTransactions: boolean;
-  hasFinancialImpact: boolean;
-};
-type InvestmentOverview = {
-  period: { fromMonth: string; toMonth: string };
-  positions: {
-    assetId: string;
-    ticker: string | null;
-    name: string;
-    assetClass: string;
-    exchange: string | null;
-    market: string | null;
-    currency: string;
-    quantityDecimal: string;
-    averagePriceDecimal: string | null;
-    lastPriceDecimal: string | null;
-    lastPriceQuotedAt: string | null;
-    lastPriceIsStale: boolean;
-    investedCents: number;
-    currentValueCents: number | null;
-    currentValueBrlCents: number | null;
-  }[];
-  dividends: {
-    transactionId: string;
-    assetId: string | null;
-    ticker: string | null;
-    name: string | null;
-    paymentDate: string;
-    competenceMonth: string;
-    description: string;
-    currency: string;
-    amountCents: number;
-    amountBrlCents: number | null;
-  }[];
-  totalsByCurrency: Record<string, { investedCents: number; currentValueCents: number; dividendsCents: number }>;
-  consolidatedBrl: {
-    investedCents: number;
-    currentValueCents: number;
-    dividendsCents: number;
-    pendingCurrentValueCents: number;
-    pendingDividendsCents: number;
-  };
-  exchangeRate: { rateDecimal: string | null; referenceDate: string | null; provider: string | null; isStale: boolean };
-  alerts: { type: string; message: string; ticker?: string | null; currency?: string }[];
-  hasAssets: boolean;
-  hasPendingConversion: boolean;
 };
 type CardOverview = {
   period: { fromMonth: string; toMonth: string };
@@ -201,22 +133,6 @@ const emptyDashboardOverview: DashboardOverview = {
   hasTransactions: false,
   hasFinancialImpact: false,
 };
-function emptyInvestmentOverview(): InvestmentOverview {
-  return {
-    period: { fromMonth: "2026-01", toMonth: "2026-12" },
-    positions: [],
-    dividends: [],
-    totalsByCurrency: {
-      BRL: { investedCents: 0, currentValueCents: 0, dividendsCents: 0 },
-      USD: { investedCents: 0, currentValueCents: 0, dividendsCents: 0 },
-    },
-    consolidatedBrl: { investedCents: 0, currentValueCents: 0, dividendsCents: 0, pendingCurrentValueCents: 0, pendingDividendsCents: 0 },
-    exchangeRate: { rateDecimal: null, referenceDate: null, provider: null, isStale: false },
-    alerts: [],
-    hasAssets: false,
-    hasPendingConversion: false,
-  };
-}
 const emptyCardOverview: CardOverview = {
   period: { fromMonth: "2026-01", toMonth: "2026-12" },
   summary: {
@@ -307,36 +223,6 @@ async function readJson(response: Response) {
   return body;
 }
 
-function assertDashboardOverview(value: unknown): DashboardOverview {
-  if (!value || typeof value !== "object") {
-    throw new Error("Payload invalido do Dashboard.");
-  }
-  const candidate = value as Partial<DashboardOverview>;
-  if (
-    !candidate.summary
-    || !Array.isArray(candidate.monthlySeries)
-    || !Array.isArray(candidate.categories)
-    || typeof candidate.transactionCount !== "number"
-    || typeof candidate.countableTransactionCount !== "number"
-    || typeof candidate.hasTransactions !== "boolean"
-    || typeof candidate.hasFinancialImpact !== "boolean"
-  ) {
-    throw new Error("Payload invalido do Dashboard.");
-  }
-  return { ...candidate, investments: candidate.investments ?? emptyInvestmentOverview() } as DashboardOverview;
-}
-
-function assertInvestmentOverview(value: unknown): InvestmentOverview {
-  if (!value || typeof value !== "object") {
-    throw new Error("Payload invalido de Ativos.");
-  }
-  const candidate = value as Partial<InvestmentOverview>;
-  if (!candidate.totalsByCurrency || !candidate.consolidatedBrl || !candidate.exchangeRate || !Array.isArray(candidate.positions) || !Array.isArray(candidate.dividends) || !Array.isArray(candidate.alerts)) {
-    throw new Error("Payload invalido de Ativos.");
-  }
-  return candidate as InvestmentOverview;
-}
-
 function assertCardOverview(value: unknown): CardOverview {
   if (!value || typeof value !== "object") {
     throw new Error("Payload invalido de Cartoes.");
@@ -364,6 +250,8 @@ function DashboardView({ year }: { year: number }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const maxMonth = Math.max(1, ...dashboard.monthlySeries.map((item) => Math.max(item.livingCostCents, item.cardPurchasesCents, item.pendingReviewCents)));
+  const investmentBrl = totalForCurrency(dashboard.investments, "BRL");
+  const investmentUsd = totalForCurrency(dashboard.investments, "USD");
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -397,7 +285,8 @@ function DashboardView({ year }: { year: number }) {
       {error && <p className="error-banner">{error}</p>}
       {!loading && !error && !dashboard.hasFinancialImpact && <p className="empty-dashboard">{dashboard.hasTransactions ? "Existem registros no periodo, mas nenhum impacto financeiro relevante para o Dashboard." : "Nenhum lancamento persistido encontrado para este periodo. Cadastre despesas na aba Custos para alimentar o Dashboard."}</p>}
       <section className="kpi-grid"><Kpi title="Custo de vida" value={fmt(dashboard.summary.livingCostCents / 100)} /><Kpi title="Compras no cartao" value={fmt(dashboard.summary.cardPurchasesCents / 100)} tone="blue" /><Kpi title="Pendentes" value={fmt(dashboard.summary.pendingReviewCents / 100)} tone="amber" /><Kpi title="Aportes novos" value={fmt(dashboard.summary.contributionsCents / 100)} tone="green" /><Kpi title="Dividendos" value={fmt(dashboard.summary.dividendsCents / 100)} tone="violet" /></section>
-      <section className="kpi-grid"><Kpi title="Patrimonio BRL" value={fmt(dashboard.investments.totalsByCurrency.BRL.currentValueCents / 100)} tone="green" /><Kpi title="Patrimonio USD" value={fmtCurrency(dashboard.investments.totalsByCurrency.USD.currentValueCents / 100, "USD")} tone="blue" /><Kpi title="Consolidado em BRL" value={fmt(dashboard.investments.consolidatedBrl.currentValueCents / 100)} tone="violet" /><Kpi title="Proventos USD" value={fmtCurrency(dashboard.investments.totalsByCurrency.USD.dividendsCents / 100, "USD")} tone="amber" /></section>
+      <section className="kpi-grid"><Kpi title="Patrimonio BRL" value={fmt(investmentBrl.currentValueCents / 100)} tone="green" /><Kpi title="Patrimonio USD" value={fmtCurrency(investmentUsd.currentValueCents / 100, "USD")} tone="blue" /><Kpi title="Consolidado em BRL" value={fmt(dashboard.investments.consolidatedBrl.currentValueCents / 100)} tone="violet" /><Kpi title="Proventos USD" value={fmtCurrency(investmentUsd.dividendsCents / 100, "USD")} tone="amber" /></section>
+      {dashboard.investments.hasPendingConversion && <p className="empty-state">Consolidado em BRL parcial: existem valores em moeda original sem conversao disponivel.</p>}
       {dashboard.investments.alerts.length > 0 && <p className="error-banner">{dashboard.investments.alerts.map((alert) => alert.message).join(" ")}</p>}
       <section className="split wide-left">
         <article className="panel"><div className="chart-head"><h3>Evolucao mensal persistida</h3><strong>{loading ? "Carregando..." : `${dashboard.countableTransactionCount} relevantes`}</strong></div><div className="month-bars labeled dashboard-bars">{dashboard.monthlySeries.length ? dashboard.monthlySeries.map((item) => <div key={item.month}><i style={{ height: `${Math.max(6, (item.livingCostCents / maxMonth) * 100)}%` }} /><span>{item.month.slice(5)}</span><b>{fmt(item.livingCostCents / 100)}</b></div>) : <p className="empty-state">Sem dados para grafico.</p>}</div></article>
@@ -688,15 +577,8 @@ function InvestmentsConnectedView({ year }: { year: string }) {
   const [overview, setOverview] = useState<InvestmentOverview>(emptyInvestmentOverview());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const dividendsByAsset = useMemo(() => {
-    const totals = new Map<string, number>();
-    for (const dividend of overview.dividends) {
-      if (dividend.assetId) {
-        totals.set(dividend.assetId, (totals.get(dividend.assetId) ?? 0) + dividend.amountCents);
-      }
-    }
-    return totals;
-  }, [overview.dividends]);
+  const overviewBrl = totalForCurrency(overview, "BRL");
+  const overviewUsd = totalForCurrency(overview, "USD");
 
   const loadInvestments = useCallback(async () => {
     setLoading(true);
@@ -731,14 +613,15 @@ function InvestmentsConnectedView({ year }: { year: string }) {
       {!loading && !error && !overview.hasAssets && <p className="empty-dashboard">Nenhum ativo persistido encontrado. Cadastre ou importe ativos em etapa futura para alimentar esta visao.</p>}
       {overview.alerts.length > 0 && <p className="error-banner">{overview.alerts.map((alert) => alert.message).join(" ")}</p>}
       <section className="kpi-grid">
-        <Kpi title="Valor atual BRL" value={fmt(overview.totalsByCurrency.BRL.currentValueCents / 100)} tone="green" />
-        <Kpi title="Valor atual USD" value={fmtCurrency(overview.totalsByCurrency.USD.currentValueCents / 100, "USD")} tone="blue" />
+        <Kpi title="Valor atual BRL" value={fmt(overviewBrl.currentValueCents / 100)} tone="green" />
+        <Kpi title="Valor atual USD" value={fmtCurrency(overviewUsd.currentValueCents / 100, "USD")} tone="blue" />
         <Kpi title="Consolidado BRL" value={fmt(overview.consolidatedBrl.currentValueCents / 100)} tone="violet" />
-        <Kpi title="Proventos BRL" value={fmt(overview.totalsByCurrency.BRL.dividendsCents / 100)} />
-        <Kpi title="Proventos USD" value={fmtCurrency(overview.totalsByCurrency.USD.dividendsCents / 100, "USD")} tone="amber" />
+        <Kpi title="Proventos BRL" value={fmt(overviewBrl.dividendsCents / 100)} />
+        <Kpi title="Proventos USD" value={fmtCurrency(overviewUsd.dividendsCents / 100, "USD")} tone="amber" />
       </section>
+      {overview.hasPendingConversion && <p className="empty-state">Consolidado BRL parcial: existem valores em moeda original sem conversao disponivel.</p>}
       <section className="split wide-left">
-        <DataTable headers={["Ticker", "Classe", "Moeda", "Qtd", "Preco medio", "Preco atual", "Valor atual", "Proventos"]} rows={overview.positions.map((asset) => [asset.ticker ?? asset.name, asset.assetClass, asset.currency, asset.quantityDecimal, asset.averagePriceDecimal ? fmtCurrency(Number(asset.averagePriceDecimal), asset.currency) : "-", asset.lastPriceDecimal ? fmtCurrency(Number(asset.lastPriceDecimal), asset.currency) : "-", asset.currentValueCents === null ? "Preco pendente" : fmtCurrency(asset.currentValueCents / 100, asset.currency), fmtCurrency((dividendsByAsset.get(asset.assetId) ?? 0) / 100, asset.currency)])} />
+        <DataTable headers={["Ticker", "Classe", "Moeda", "Qtd", "Preco medio", "Preco atual", "Valor atual", "Proventos"]} rows={overview.positions.map((asset) => [asset.ticker ?? asset.name, asset.assetClass, asset.currency, asset.quantityDecimal, asset.averagePriceDecimal ? fmtCurrency(Number(asset.averagePriceDecimal), asset.currency) : "-", asset.lastPriceDecimal ? fmtCurrency(Number(asset.lastPriceDecimal), asset.currency) : "-", asset.currentValueCents === null ? "Preco pendente" : fmtCurrency(asset.currentValueCents / 100, asset.currency), fmtCurrency(dividendTotalForPosition(overview, asset.assetId, asset.currency) / 100, asset.currency)])} />
         <DataTable headers={["Data", "Ativo", "Moeda", "Valor", "Valor BRL"]} rows={overview.dividends.map((dividend) => [fmtDate(dividend.paymentDate), dividend.ticker ?? dividend.name ?? dividend.description, dividend.currency, fmtCurrency(dividend.amountCents / 100, dividend.currency), dividend.amountBrlCents === null ? "Cambio pendente" : fmt(dividend.amountBrlCents / 100)])} />
       </section>
       <p className="empty-state">{overview.exchangeRate.rateDecimal ? `USD/BRL ${overview.exchangeRate.rateDecimal} em ${fmtDate(overview.exchangeRate.referenceDate ?? "")} (${overview.exchangeRate.provider})` : "Cotacao USD/BRL nao cadastrada."}</p>
@@ -777,7 +660,7 @@ function MatrixTable({ rows, totals }: { rows: { label: string; values: number[]
 }
 
 function DataTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
-  return <article className="table-panel"><table className="data-table"><thead><tr>{headers.map((head) => <th key={head}>{head}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={index}>{row.map((cell, cellIndex) => cellIndex ? <td key={cell}>{cell}</td> : <th key={cell}>{cell}</th>)}</tr>)}</tbody></table></article>;
+  return <article className="table-panel"><table className="data-table"><thead><tr>{headers.map((head) => <th key={head}>{head}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={index}>{row.map((cell, cellIndex) => cellIndex ? <td key={`${index}-${cellIndex}`}>{cell}</td> : <th key={`${index}-${cellIndex}`}>{cell}</th>)}</tr>)}</tbody></table></article>;
 }
 
 function LineChart({ values, labels = values.map((_, index) => String(index + 1)) }: { values: number[]; labels?: string[] }) {

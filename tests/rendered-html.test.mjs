@@ -98,6 +98,7 @@ test("server-renders a aplicacao financeira atual", async () => {
   assert.match(html, /Controle de Custos/);
   assert.match(html, /Custo Mensal[\s\S]*2026/);
   assert.match(html, /Dashboard/);
+  assert.match(html, /Ativos e Proventos/);
   assert.match(html, /Dividendos 2026/);
   assert.doesNotMatch(html, /Your site is taking shape|Building your site/);
 });

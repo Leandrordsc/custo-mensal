@@ -13,7 +13,7 @@ export type CurrencyTotals = {
 };
 
 export type InvestmentAlert = {
-  type: "MISSING_PRICE" | "STALE_PRICE" | "MISSING_EXCHANGE_RATE" | "STALE_EXCHANGE_RATE";
+  type: "MISSING_PRICE" | "STALE_PRICE" | "MISSING_EXCHANGE_RATE" | "STALE_EXCHANGE_RATE" | "UNSUPPORTED_CURRENCY";
   severity: "warning";
   message: string;
   assetId?: string;
@@ -61,6 +61,7 @@ export type InvestmentOverview = {
     investedCents: number;
     currentValueCents: number;
     dividendsCents: number;
+    pendingInvestedCents: number;
     pendingCurrentValueCents: number;
     pendingDividendsCents: number;
   };
@@ -109,6 +110,7 @@ type DividendRow = {
   ticker: string | null;
   name: string | null;
   payment_date: string | null;
+  date: string;
   competence_month: string;
   description: string;
   amount_cents: number;
@@ -132,7 +134,7 @@ export class InvestmentService {
     const dividends = this.listDividends(userId, period).map((row) => this.mapDividend(row, exchangeRate, alerts));
     const totalsByCurrency = buildCurrencyTotals(positions, dividends);
     const consolidatedBrl = buildConsolidatedBrl(positions, dividends, exchangeRate);
-    const hasPendingConversion = consolidatedBrl.pendingCurrentValueCents > 0 || consolidatedBrl.pendingDividendsCents > 0;
+    const hasPendingConversion = consolidatedBrl.pendingInvestedCents > 0 || consolidatedBrl.pendingCurrentValueCents > 0 || consolidatedBrl.pendingDividendsCents > 0;
 
     return {
       period,
@@ -180,6 +182,7 @@ export class InvestmentService {
        and t.competence_month <= ?
       where a.user_id = ?
       group by a.id, a.ticker, a.name, a.asset_class, a.exchange, a.market, a.currency
+      having invested_cents > 0 or cast(quantity_decimal as real) > 0
       order by a.currency, a.asset_class, coalesce(a.ticker, a.name)
     `).all(period.toMonth, userId) as PositionRow[];
   }
@@ -192,7 +195,7 @@ export class InvestmentService {
         and asset_id = ?
         and currency = ?
         and quoted_at <= ?
-      order by fetched_at desc, quoted_at desc, id desc
+      order by quoted_at desc, fetched_at desc, id desc
       limit 1
     `).get(userId, assetId, currency, maxTimestampForMonth(period.toMonth)) as PriceRow | undefined;
   }
@@ -218,6 +221,7 @@ export class InvestmentService {
         a.ticker,
         a.name,
         de.payment_date,
+        t.date,
         t.competence_month,
         t.description,
         t.amount_cents,
@@ -252,13 +256,16 @@ export class InvestmentService {
     if (row.currency === "USD" && exchangeRate?.is_stale === 1) {
       alerts.push({ type: "STALE_EXCHANGE_RATE", severity: "warning", message: "A cotacao USD/BRL registrada esta defasada.", currency: "USD" });
     }
+    if (row.currency !== "BRL" && row.currency !== "USD") {
+      alerts.push({ type: "UNSUPPORTED_CURRENCY", severity: "warning", message: `Moeda ${row.currency} ainda nao possui conversao para o consolidado BRL.`, currency: row.currency });
+    }
 
     return {
       transactionId: String(row.transaction_id),
       assetId: nullableString(row.asset_id),
       ticker: nullableString(row.ticker),
       name: nullableString(row.name),
-      paymentDate: String(row.payment_date ?? row.competence_month),
+      paymentDate: String(row.payment_date ?? row.date),
       competenceMonth: String(row.competence_month),
       description: String(row.description),
       amountCents: Number(row.amount_cents),
@@ -285,6 +292,9 @@ function mapPositionRow(row: PositionRow, price: PriceRow | undefined, exchangeR
   }
   if (row.currency === "USD" && exchangeRate?.is_stale === 1) {
     alerts.push({ type: "STALE_EXCHANGE_RATE", severity: "warning", message: "A cotacao USD/BRL registrada esta defasada.", currency: "USD" });
+  }
+  if (row.currency !== "BRL" && row.currency !== "USD") {
+    alerts.push({ type: "UNSUPPORTED_CURRENCY", severity: "warning", message: `Moeda ${row.currency} ainda nao possui conversao para o consolidado BRL.`, assetId: row.asset_id, ticker: row.ticker, currency: row.currency });
   }
 
   return {
@@ -338,8 +348,9 @@ function buildConsolidatedBrl(positions: InvestmentPosition[], dividends: Divide
     }, 0),
     currentValueCents: positions.reduce((total, item) => total + (item.currentValueBrlCents ?? 0), 0),
     dividendsCents: dividends.reduce((total, item) => total + (item.amountBrlCents ?? 0), 0),
-    pendingCurrentValueCents: positions.filter((item) => item.currency !== "BRL" && item.currentValueCents !== null && item.currentValueBrlCents === null).reduce((total, item) => total + (item.currentValueCents ?? 0), 0),
-    pendingDividendsCents: dividends.filter((item) => item.currency !== "BRL" && item.amountBrlCents === null).reduce((total, item) => total + item.amountCents, 0),
+    pendingInvestedCents: positions.filter((item) => item.currency === "USD" && item.investedCents > 0 && !canConvertUsd(exchangeRate)).reduce((total, item) => total + item.investedCents, 0),
+    pendingCurrentValueCents: positions.filter((item) => item.currency === "USD" && item.currentValueCents !== null && item.currentValueBrlCents === null).reduce((total, item) => total + (item.currentValueCents ?? 0), 0),
+    pendingDividendsCents: dividends.filter((item) => item.currency === "USD" && item.amountBrlCents === null).reduce((total, item) => total + item.amountCents, 0),
   };
 }
 
@@ -347,10 +358,14 @@ function convertUsdToBrl(valueCents: number | null, exchangeRate: ExchangeRateRo
   if (valueCents === null) {
     return null;
   }
-  if (!exchangeRate) {
+  if (!canConvertUsd(exchangeRate)) {
     return null;
   }
-  return Math.round(valueCents * Number(exchangeRate.rate_decimal));
+  return Math.round(valueCents * Number(exchangeRate!.rate_decimal));
+}
+
+function canConvertUsd(exchangeRate: ExchangeRateRow | undefined) {
+  return Boolean(exchangeRate && Number.isFinite(Number(exchangeRate.rate_decimal)));
 }
 
 function dedupeAlerts(alerts: InvestmentAlert[]) {
@@ -380,7 +395,9 @@ function assertMonth(month: string, label: string) {
 }
 
 function maxDateForMonth(month: string) {
-  return `${month}-31`;
+  const [year, monthNumber] = month.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  return `${month}-${String(lastDay).padStart(2, "0")}`;
 }
 
 function maxTimestampForMonth(month: string) {
