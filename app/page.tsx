@@ -4,8 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { allocation, annualCostSheets, cardRows, cardYield, dividends, dividendTotals, getYearSheet, hasDetailedExpenseRows, importIssues, monthlyTotals, months, sum } from "@/lib/finance-data";
 
-const menu = ["Dashboard", "Custos", "Cartões", "Investimentos", "FIIS - Dividendos"];
+const menu = ["Dashboard", "Custos", "Cartões", "Ativos e Proventos"];
 const fmt = (value: number) => value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+const fmtCurrency = (value: number, currency: string) => value.toLocaleString("pt-BR", { style: "currency", currency, maximumFractionDigits: 0 });
 const pct = (value: number) => value.toLocaleString("pt-BR", { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const fmtDate = (value: string) => {
   const date = new Date(`${value}T00:00:00`);
@@ -75,10 +76,55 @@ type DashboardOverview = {
   };
   monthlySeries: { month: string; livingCostCents: number; cardPurchasesCents: number; pendingReviewCents: number }[];
   categories: { category: string; amountCents: number }[];
+  investments: InvestmentOverview;
   transactionCount: number;
   countableTransactionCount: number;
   hasTransactions: boolean;
   hasFinancialImpact: boolean;
+};
+type InvestmentOverview = {
+  period: { fromMonth: string; toMonth: string };
+  positions: {
+    assetId: string;
+    ticker: string | null;
+    name: string;
+    assetClass: string;
+    exchange: string | null;
+    market: string | null;
+    currency: string;
+    quantityDecimal: string;
+    averagePriceDecimal: string | null;
+    lastPriceDecimal: string | null;
+    lastPriceQuotedAt: string | null;
+    lastPriceIsStale: boolean;
+    investedCents: number;
+    currentValueCents: number | null;
+    currentValueBrlCents: number | null;
+  }[];
+  dividends: {
+    transactionId: string;
+    assetId: string | null;
+    ticker: string | null;
+    name: string | null;
+    paymentDate: string;
+    competenceMonth: string;
+    description: string;
+    currency: string;
+    amountCents: number;
+    amountBrlCents: number | null;
+  }[];
+  totalsByCurrency: Record<string, { investedCents: number; currentValueCents: number; dividendsCents: number }>;
+  consolidatedBrl: {
+    investedCents: number;
+    currentValueCents: number;
+    dividendsCents: number;
+    pendingCurrentValueCents: number;
+    pendingDividendsCents: number;
+  };
+  exchangeRate: { rateDecimal: string | null; referenceDate: string | null; provider: string | null; isStale: boolean };
+  alerts: { type: string; message: string; ticker?: string | null; currency?: string }[];
+  hasAssets: boolean;
+  hasPendingConversion: boolean;
 };
 type CardOverview = {
   period: { fromMonth: string; toMonth: string };
@@ -149,11 +195,28 @@ const emptyDashboardOverview: DashboardOverview = {
   },
   monthlySeries: [],
   categories: [],
+  investments: emptyInvestmentOverview(),
   transactionCount: 0,
   countableTransactionCount: 0,
   hasTransactions: false,
   hasFinancialImpact: false,
 };
+function emptyInvestmentOverview(): InvestmentOverview {
+  return {
+    period: { fromMonth: "2026-01", toMonth: "2026-12" },
+    positions: [],
+    dividends: [],
+    totalsByCurrency: {
+      BRL: { investedCents: 0, currentValueCents: 0, dividendsCents: 0 },
+      USD: { investedCents: 0, currentValueCents: 0, dividendsCents: 0 },
+    },
+    consolidatedBrl: { investedCents: 0, currentValueCents: 0, dividendsCents: 0, pendingCurrentValueCents: 0, pendingDividendsCents: 0 },
+    exchangeRate: { rateDecimal: null, referenceDate: null, provider: null, isStale: false },
+    alerts: [],
+    hasAssets: false,
+    hasPendingConversion: false,
+  };
+}
 const emptyCardOverview: CardOverview = {
   period: { fromMonth: "2026-01", toMonth: "2026-12" },
   summary: {
@@ -194,7 +257,6 @@ export default function Home() {
   const [active, setActive] = useState("Dashboard");
   const [year, setYear] = useState("2026");
   const [search, setSearch] = useState("");
-  const selectedDividends = useMemo(() => dividends.filter((row) => row.ticker.toLowerCase().includes(search.toLowerCase()) || row.company.toLowerCase().includes(search.toLowerCase())), [search]);
   const years = annualCostSheets.map((sheet) => String(sheet.year));
 
   return (
@@ -213,9 +275,8 @@ export default function Home() {
         <Hero year={year} />
         {active === "Dashboard" && <DashboardView year={Number(year)} />}
         {active === "Custos" && <CostsView year={year} />}
-        {active === "Investimentos" && <InvestmentsView />}
         {active === "Cartões" && <CardsViewConnected />}
-        {active === "FIIS - Dividendos" && <DividendsView rows={selectedDividends} />}
+        {active === "Ativos e Proventos" && <InvestmentsConnectedView year={year} />}
       </section>
     </main>
   );
@@ -262,7 +323,18 @@ function assertDashboardOverview(value: unknown): DashboardOverview {
   ) {
     throw new Error("Payload invalido do Dashboard.");
   }
-  return candidate as DashboardOverview;
+  return { ...candidate, investments: candidate.investments ?? emptyInvestmentOverview() } as DashboardOverview;
+}
+
+function assertInvestmentOverview(value: unknown): InvestmentOverview {
+  if (!value || typeof value !== "object") {
+    throw new Error("Payload invalido de Ativos.");
+  }
+  const candidate = value as Partial<InvestmentOverview>;
+  if (!candidate.totalsByCurrency || !candidate.consolidatedBrl || !candidate.exchangeRate || !Array.isArray(candidate.positions) || !Array.isArray(candidate.dividends) || !Array.isArray(candidate.alerts)) {
+    throw new Error("Payload invalido de Ativos.");
+  }
+  return candidate as InvestmentOverview;
 }
 
 function assertCardOverview(value: unknown): CardOverview {
@@ -325,6 +397,8 @@ function DashboardView({ year }: { year: number }) {
       {error && <p className="error-banner">{error}</p>}
       {!loading && !error && !dashboard.hasFinancialImpact && <p className="empty-dashboard">{dashboard.hasTransactions ? "Existem registros no periodo, mas nenhum impacto financeiro relevante para o Dashboard." : "Nenhum lancamento persistido encontrado para este periodo. Cadastre despesas na aba Custos para alimentar o Dashboard."}</p>}
       <section className="kpi-grid"><Kpi title="Custo de vida" value={fmt(dashboard.summary.livingCostCents / 100)} /><Kpi title="Compras no cartao" value={fmt(dashboard.summary.cardPurchasesCents / 100)} tone="blue" /><Kpi title="Pendentes" value={fmt(dashboard.summary.pendingReviewCents / 100)} tone="amber" /><Kpi title="Aportes novos" value={fmt(dashboard.summary.contributionsCents / 100)} tone="green" /><Kpi title="Dividendos" value={fmt(dashboard.summary.dividendsCents / 100)} tone="violet" /></section>
+      <section className="kpi-grid"><Kpi title="Patrimonio BRL" value={fmt(dashboard.investments.totalsByCurrency.BRL.currentValueCents / 100)} tone="green" /><Kpi title="Patrimonio USD" value={fmtCurrency(dashboard.investments.totalsByCurrency.USD.currentValueCents / 100, "USD")} tone="blue" /><Kpi title="Consolidado em BRL" value={fmt(dashboard.investments.consolidatedBrl.currentValueCents / 100)} tone="violet" /><Kpi title="Proventos USD" value={fmtCurrency(dashboard.investments.totalsByCurrency.USD.dividendsCents / 100, "USD")} tone="amber" /></section>
+      {dashboard.investments.alerts.length > 0 && <p className="error-banner">{dashboard.investments.alerts.map((alert) => alert.message).join(" ")}</p>}
       <section className="split wide-left">
         <article className="panel"><div className="chart-head"><h3>Evolucao mensal persistida</h3><strong>{loading ? "Carregando..." : `${dashboard.countableTransactionCount} relevantes`}</strong></div><div className="month-bars labeled dashboard-bars">{dashboard.monthlySeries.length ? dashboard.monthlySeries.map((item) => <div key={item.month}><i style={{ height: `${Math.max(6, (item.livingCostCents / maxMonth) * 100)}%` }} /><span>{item.month.slice(5)}</span><b>{fmt(item.livingCostCents / 100)}</b></div>) : <p className="empty-state">Sem dados para grafico.</p>}</div></article>
         <article className="panel"><div className="chart-head"><h3>Por categoria</h3><strong>{fmt(dashboard.summary.livingCostCents / 100)}</strong></div><div className="simple-bars">{dashboard.categories.length ? dashboard.categories.map((item) => <div key={item.category}><span>{item.category}</span><i style={{ width: `${Math.max(4, (item.amountCents / Math.max(1, dashboard.summary.livingCostCents)) * 100)}%` }} /><b>{fmt(item.amountCents / 100)}</b></div>) : <p className="empty-state">Sem despesas confirmadas.</p>}</div></article>
@@ -525,6 +599,7 @@ function StaticCostsView({ year }: { year: string }) {
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function InvestmentsView() {
   const total = allocation.reduce((sum, item) => sum + item.amount, 0);
   const equityCurve = annualCostSheets.map((sheet) => sum(monthlyTotals(sheet.rows)));
@@ -608,6 +683,70 @@ function CardsView() {
   );
 }
 
+function InvestmentsConnectedView({ year }: { year: string }) {
+  const [month, setMonth] = useState<string>("all");
+  const [overview, setOverview] = useState<InvestmentOverview>(emptyInvestmentOverview());
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const dividendsByAsset = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const dividend of overview.dividends) {
+      if (dividend.assetId) {
+        totals.set(dividend.assetId, (totals.get(dividend.assetId) ?? 0) + dividend.amountCents);
+      }
+    }
+    return totals;
+  }, [overview.dividends]);
+
+  const loadInvestments = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const nextOverview = assertInvestmentOverview(await readJson(await fetch(`${localApiBaseUrl}/api/investments/overview?year=${year}&month=${month}`)));
+      setOverview(nextOverview);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Nao foi possivel carregar ativos.");
+      setOverview(emptyInvestmentOverview());
+    } finally {
+      setLoading(false);
+    }
+  }, [month, year]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadInvestments();
+  }, [loadInvestments]);
+
+  return (
+    <>
+      <section className="section-head"><div><p className="eyebrow">Ativos SQLite</p><h2>Ativos e proventos multi-moeda</h2></div><span>Brasil em BRL, EUA em USD e consolidado em BRL por cotacao registrada.</span></section>
+      <section className="costs-toolbar">
+        <select aria-label="Periodo de Ativos" value={month} onChange={(event) => setMonth(event.target.value)}>
+          <option value="all">Ano inteiro</option>
+          {monthOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+        </select>
+        <button onClick={() => void loadInvestments()}>Atualizar</button>
+      </section>
+      {error && <p className="error-banner">{error}</p>}
+      {!loading && !error && !overview.hasAssets && <p className="empty-dashboard">Nenhum ativo persistido encontrado. Cadastre ou importe ativos em etapa futura para alimentar esta visao.</p>}
+      {overview.alerts.length > 0 && <p className="error-banner">{overview.alerts.map((alert) => alert.message).join(" ")}</p>}
+      <section className="kpi-grid">
+        <Kpi title="Valor atual BRL" value={fmt(overview.totalsByCurrency.BRL.currentValueCents / 100)} tone="green" />
+        <Kpi title="Valor atual USD" value={fmtCurrency(overview.totalsByCurrency.USD.currentValueCents / 100, "USD")} tone="blue" />
+        <Kpi title="Consolidado BRL" value={fmt(overview.consolidatedBrl.currentValueCents / 100)} tone="violet" />
+        <Kpi title="Proventos BRL" value={fmt(overview.totalsByCurrency.BRL.dividendsCents / 100)} />
+        <Kpi title="Proventos USD" value={fmtCurrency(overview.totalsByCurrency.USD.dividendsCents / 100, "USD")} tone="amber" />
+      </section>
+      <section className="split wide-left">
+        <DataTable headers={["Ticker", "Classe", "Moeda", "Qtd", "Preco medio", "Preco atual", "Valor atual", "Proventos"]} rows={overview.positions.map((asset) => [asset.ticker ?? asset.name, asset.assetClass, asset.currency, asset.quantityDecimal, asset.averagePriceDecimal ? fmtCurrency(Number(asset.averagePriceDecimal), asset.currency) : "-", asset.lastPriceDecimal ? fmtCurrency(Number(asset.lastPriceDecimal), asset.currency) : "-", asset.currentValueCents === null ? "Preco pendente" : fmtCurrency(asset.currentValueCents / 100, asset.currency), fmtCurrency((dividendsByAsset.get(asset.assetId) ?? 0) / 100, asset.currency)])} />
+        <DataTable headers={["Data", "Ativo", "Moeda", "Valor", "Valor BRL"]} rows={overview.dividends.map((dividend) => [fmtDate(dividend.paymentDate), dividend.ticker ?? dividend.name ?? dividend.description, dividend.currency, fmtCurrency(dividend.amountCents / 100, dividend.currency), dividend.amountBrlCents === null ? "Cambio pendente" : fmt(dividend.amountBrlCents / 100)])} />
+      </section>
+      <p className="empty-state">{overview.exchangeRate.rateDecimal ? `USD/BRL ${overview.exchangeRate.rateDecimal} em ${fmtDate(overview.exchangeRate.referenceDate ?? "")} (${overview.exchangeRate.provider})` : "Cotacao USD/BRL nao cadastrada."}</p>
+    </>
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function DividendsView({ rows }: { rows: typeof dividends }) {
   const monthly = months.map((_, index) => rows.reduce((total, row) => total + row.paid[index], 0));
   const totalPaid = sum(monthly);

@@ -450,6 +450,29 @@ export const assetPrices = sqliteTable(
   }),
 );
 
+export const exchangeRates = sqliteTable(
+  "exchange_rates",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id),
+    baseCurrency: text("base_currency").notNull(),
+    quoteCurrency: text("quote_currency").notNull(),
+    rateDecimal: text("rate_decimal").notNull(),
+    referenceDate: text("reference_date").notNull(),
+    provider: text("provider").notNull(),
+    fetchedAt: text("fetched_at").notNull(),
+    isStale: integer("is_stale", { mode: "boolean" }).notNull().default(false),
+    sourceHash: text("source_hash"),
+  },
+  (table) => ({
+    userIdIdx: uniqueIndex("exchange_rates_user_id_idx").on(table.userId, table.id),
+    userPairReferenceIdx: index("exchange_rates_user_pair_reference_idx").on(table.userId, table.baseCurrency, table.quoteCurrency, table.referenceDate),
+    currencyPairCheck: check("exchange_rates_currency_pair_check", sql`length(${table.baseCurrency}) = 3 and length(${table.quoteCurrency}) = 3 and ${table.baseCurrency} <> ${table.quoteCurrency}`),
+    staleCheck: check("exchange_rates_is_stale_check", sql`${table.isStale} in (0, 1)`),
+    rateCheck: check("exchange_rates_rate_decimal_check", sql`cast(${table.rateDecimal} as real) > 0`),
+  }),
+);
+
 export const importBatches = sqliteTable(
   "import_batches",
   {

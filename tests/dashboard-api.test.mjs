@@ -50,6 +50,40 @@ function expenseInput(bases, override = {}) {
   };
 }
 
+function insertAsset(db, userId, { id, ticker, name, assetClass, currency, exchange = null, market = null }) {
+  db.prepare(`
+    insert into assets (id, user_id, ticker, name, asset_class, exchange, market, currency)
+    values (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, userId, ticker, name, assetClass, exchange, market, currency);
+}
+
+function insertInvestment(db, userId, { id, assetId, amountCents, currency, quantity, unitPrice }) {
+  db.prepare(`
+    insert into transactions (
+      id, user_id, nature, subtype, origin, classification_status, transaction_status,
+      asset_id, date, competence_month, description, amount_cents, currency, direction
+    ) values (?, ?, 'INVESTIMENTO', 'APORTE', 'CONTA', 'CONFIRMADO', 'ACTIVE', ?, '2026-08-10', '2026-08', 'Aporte', ?, ?, 'OUTFLOW')
+  `).run(`${id}_tx`, userId, assetId, amountCents, currency);
+  db.prepare(`
+    insert into investment_events (id, user_id, transaction_id, asset_id, quantity_decimal, unit_price_decimal, gross_amount_cents)
+    values (?, ?, ?, ?, ?, ?, ?)
+  `).run(id, userId, `${id}_tx`, assetId, quantity, unitPrice, amountCents);
+}
+
+function insertPrice(db, userId, { id, assetId, price, currency }) {
+  db.prepare(`
+    insert into asset_prices (id, user_id, asset_id, price_decimal, currency, quoted_at, provider, fetched_at, is_stale)
+    values (?, ?, ?, ?, ?, '2026-08-20T00:00:00.000Z', 'manual', '2026-08-20T00:00:00.000Z', 0)
+  `).run(id, userId, assetId, price, currency);
+}
+
+function insertExchange(db, userId, { id = "usd_brl", rate = "5.00" } = {}) {
+  db.prepare(`
+    insert into exchange_rates (id, user_id, base_currency, quote_currency, rate_decimal, reference_date, provider, fetched_at, is_stale)
+    values (?, ?, 'USD', 'BRL', ?, '2026-08-20', 'manual', '2026-08-20T00:00:00.000Z', 0)
+  `).run(id, userId, rate);
+}
+
 test("api dashboard retorna zeros para banco sem transacoes", async () => {
   const { db, cleanup } = await createDatabase();
   try {
@@ -152,6 +186,29 @@ test("api dashboard separa registros brutos de impacto financeiro relevante", as
     assert.equal(body.summary.livingCostCents, 0);
     assert.equal(body.summary.cardPurchasesCents, 0);
     assert.equal(body.summary.ignoredCents, 7000);
+  } finally {
+    cleanup();
+  }
+});
+
+test("api dashboard inclui ativos USD e consolidado BRL", async () => {
+  const { db, cleanup } = await createDatabase();
+  try {
+    const context = { userId: "user_a" };
+    bootstrapLocalUser(db, context);
+    insertAsset(db, "user_a", { id: "o_reit", ticker: "O", name: "Realty Income", assetClass: "REIT", currency: "USD", exchange: "NYSE", market: "US" });
+    insertInvestment(db, "user_a", { id: "aporte_o", assetId: "o_reit", amountCents: 10000, currency: "USD", quantity: "2", unitPrice: "50" });
+    insertPrice(db, "user_a", { id: "price_o", assetId: "o_reit", price: "60", currency: "USD" });
+    insertExchange(db, "user_a");
+
+    const handler = createLocalApiHandler({ db, context });
+    const response = await handler(new Request("http://local/api/dashboard?year=2026&month=8"));
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.investments.totalsByCurrency.USD.currentValueCents, 12000);
+    assert.equal(body.investments.consolidatedBrl.investedCents, 50000);
+    assert.equal(body.investments.consolidatedBrl.currentValueCents, 60000);
   } finally {
     cleanup();
   }

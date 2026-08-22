@@ -1,0 +1,3137 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "a8e8467b-b693-4ca0-be81-d1366b76a74f",
+  "prevId": "5a5e34ae-d96d-4716-8af0-a4f98cd0aed8",
+  "tables": {
+    "accounts": {
+      "name": "accounts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "account_type": {
+          "name": "account_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "currency": {
+          "name": "currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'BRL'"
+        },
+        "opening_balance_cents": {
+          "name": "opening_balance_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "balance_date": {
+          "name": "balance_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "active": {
+          "name": "active",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        }
+      },
+      "indexes": {
+        "accounts_user_id_idx": {
+          "name": "accounts_user_id_idx",
+          "columns": [
+            "user_id",
+            "id"
+          ],
+          "isUnique": true
+        },
+        "accounts_user_name_idx": {
+          "name": "accounts_user_name_idx",
+          "columns": [
+            "user_id",
+            "name"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "accounts_user_id_users_id_fk": {
+          "name": "accounts_user_id_users_id_fk",
+          "tableFrom": "accounts",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "accounts_account_type_check": {
+          "name": "accounts_account_type_check",
+          "value": "\"accounts\".\"account_type\" in ('CONTA', 'CAIXINHA', 'RESERVA', 'INVESTIMENTO')"
+        },
+        "accounts_currency_check": {
+          "name": "accounts_currency_check",
+          "value": "length(\"accounts\".\"currency\") = 3"
+        }
+      }
+    },
+    "asset_prices": {
+      "name": "asset_prices",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "asset_id": {
+          "name": "asset_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "price_decimal": {
+          "name": "price_decimal",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "currency": {
+          "name": "currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'BRL'"
+        },
+        "quoted_at": {
+          "name": "quoted_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fetched_at": {
+          "name": "fetched_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "is_stale": {
+          "name": "is_stale",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "source_hash": {
+          "name": "source_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "asset_prices_user_id_idx": {
+          "name": "asset_prices_user_id_idx",
+          "columns": [
+            "user_id",
+            "id"
+          ],
+          "isUnique": true
+        },
+        "asset_prices_user_asset_fetched_idx": {
+          "name": "asset_prices_user_asset_fetched_idx",
+          "columns": [
+            "user_id",
+            "asset_id",
+            "fetched_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "asset_prices_user_id_users_id_fk": {
+          "name": "asset_prices_user_id_users_id_fk",
+          "tableFrom": "asset_prices",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "asset_prices_asset_id_assets_id_fk": {
+          "name": "asset_prices_asset_id_assets_id_fk",
+          "tableFrom": "asset_prices",
+          "tableTo": "assets",
+          "columnsFrom": [
+            "asset_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "asset_prices_asset_user_fk": {
+          "name": "asset_prices_asset_user_fk",
+          "tableFrom": "asset_prices",
+          "tableTo": "assets",
+          "columnsFrom": [
+            "user_id",
+            "asset_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "asset_prices_currency_check": {
+          "name": "asset_prices_currency_check",
+          "value": "length(\"asset_prices\".\"currency\") = 3"
+        }
+      }
+    },
+    "assets": {
+      "name": "assets",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ticker": {
+          "name": "ticker",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "asset_class": {
+          "name": "asset_class",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "exchange": {
+          "name": "exchange",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "market": {
+          "name": "market",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "currency": {
+          "name": "currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'BRL'"
+        }
+      },
+      "indexes": {
+        "assets_user_id_idx": {
+          "name": "assets_user_id_idx",
+          "columns": [
+            "user_id",
+            "id"
+          ],
+          "isUnique": true
+        },
+        "assets_user_ticker_market_idx": {
+          "name": "assets_user_ticker_market_idx",
+          "columns": [
+            "user_id",
+            "ticker",
+            "exchange",
+            "market"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "assets_user_id_users_id_fk": {
+          "name": "assets_user_id_users_id_fk",
+          "tableFrom": "assets",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "assets_currency_check": {
+          "name": "assets_currency_check",
+          "value": "length(\"assets\".\"currency\") = 3"
+        }
+      }
+    },
+    "card_installments": {
+      "name": "card_installments",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "card_purchase_id": {
+          "name": "card_purchase_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "card_statement_id": {
+          "name": "card_statement_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "transaction_id": {
+          "name": "transaction_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "installment_number": {
+          "name": "installment_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "total_installments": {
+          "name": "total_installments",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "statement_month": {
+          "name": "statement_month",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "amount_cents": {
+          "name": "amount_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "card_installments_user_id_idx": {
+          "name": "card_installments_user_id_idx",
+          "columns": [
+            "user_id",
+            "id"
+          ],
+          "isUnique": true
+        },
+        "card_installments_user_purchase_number_idx": {
+          "name": "card_installments_user_purchase_number_idx",
+          "columns": [
+            "user_id",
+            "card_purchase_id",
+            "installment_number"
+          ],
+          "isUnique": true
+        },
+        "card_installments_transaction_idx": {
+          "name": "card_installments_transaction_idx",
+          "columns": [
+            "transaction_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "card_installments_user_id_users_id_fk": {
+          "name": "card_installments_user_id_users_id_fk",
+          "tableFrom": "card_installments",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "card_installments_card_purchase_id_card_purchases_id_fk": {
+          "name": "card_installments_card_purchase_id_card_purchases_id_fk",
+          "tableFrom": "card_installments",
+          "tableTo": "card_purchases",
+          "columnsFrom": [
+            "card_purchase_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "card_installments_card_statement_id_card_statements_id_fk": {
+          "name": "card_installments_card_statement_id_card_statements_id_fk",
+          "tableFrom": "card_installments",
+          "tableTo": "card_statements",
+          "columnsFrom": [
+            "card_statement_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "card_installments_transaction_id_transactions_id_fk": {
+          "name": "card_installments_transaction_id_transactions_id_fk",
+          "tableFrom": "card_installments",
+          "tableTo": "transactions",
+          "columnsFrom": [
+            "transaction_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "card_installments_purchase_user_fk": {
+          "name": "card_installments_purchase_user_fk",
+          "tableFrom": "card_installments",
+          "tableTo": "card_purchases",
+          "columnsFrom": [
+            "user_id",
+            "card_purchase_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "card_installments_statement_user_fk": {
+          "name": "card_installments_statement_user_fk",
+          "tableFrom": "card_installments",
+          "tableTo": "card_statements",
+          "columnsFrom": [
+            "user_id",
+            "card_statement_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "card_installments_transaction_user_fk": {
+          "name": "card_installments_transaction_user_fk",
+          "tableFrom": "card_installments",
+          "tableTo": "transactions",
+          "columnsFrom": [
+            "user_id",
+            "transaction_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "card_installments_amount_cents_check": {
+          "name": "card_installments_amount_cents_check",
+          "value": "\"card_installments\".\"amount_cents\" >= 0"
+        },
+        "card_installments_installment_number_check": {
+          "name": "card_installments_installment_number_check",
+          "value": "\"card_installments\".\"installment_number\" >= 1"
+        },
+        "card_installments_total_installments_check": {
+          "name": "card_installments_total_installments_check",
+          "value": "\"card_installments\".\"total_installments\" >= 1"
+        },
+        "card_installments_bounds_check": {
+          "name": "card_installments_bounds_check",
+          "value": "\"card_installments\".\"installment_number\" <= \"card_installments\".\"total_installments\""
+        }
+      }
+    },
+    "card_purchases": {
+      "name": "card_purchases",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "card_id": {
+          "name": "card_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "purchase_date": {
+          "name": "purchase_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "total_amount_cents": {
+          "name": "total_amount_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "total_installments": {
+          "name": "total_installments",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "currency": {
+          "name": "currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'BRL'"
+        },
+        "parent_purchase_id": {
+          "name": "parent_purchase_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "card_purchases_user_id_idx": {
+          "name": "card_purchases_user_id_idx",
+          "columns": [
+            "user_id",
+            "id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "card_purchases_user_id_users_id_fk": {
+          "name": "card_purchases_user_id_users_id_fk",
+          "tableFrom": "card_purchases",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "card_purchases_card_id_cards_id_fk": {
+          "name": "card_purchases_card_id_cards_id_fk",
+          "tableFrom": "card_purchases",
+          "tableTo": "cards",
+          "columnsFrom": [
+            "card_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "card_purchases_card_user_fk": {
+          "name": "card_purchases_card_user_fk",
+          "tableFrom": "card_purchases",
+          "tableTo": "cards",
+          "columnsFrom": [
+            "user_id",
+            "card_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "card_purchases_parent_user_fk": {
+          "name": "card_purchases_parent_user_fk",
+          "tableFrom": "card_purchases",
+          "tableTo": "card_purchases",
+          "columnsFrom": [
+            "user_id",
+            "parent_purchase_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "card_purchases_total_amount_cents_check": {
+          "name": "card_purchases_total_amount_cents_check",
+          "value": "\"card_purchases\".\"total_amount_cents\" >= 0"
+        },
+        "card_purchases_currency_check": {
+          "name": "card_purchases_currency_check",
+          "value": "length(\"card_purchases\".\"currency\") = 3"
+        },
+        "card_purchases_total_installments_check": {
+          "name": "card_purchases_total_installments_check",
+          "value": "\"card_purchases\".\"total_installments\" >= 1"
+        },
+        "card_purchases_parent_not_self_check": {
+          "name": "card_purchases_parent_not_self_check",
+          "value": "\"card_purchases\".\"parent_purchase_id\" is null or \"card_purchases\".\"parent_purchase_id\" <> \"card_purchases\".\"id\""
+        }
+      }
+    },
+    "card_rules": {
+      "name": "card_rules",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "card_id": {
+          "name": "card_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cashback_rate_bps": {
+          "name": "cashback_rate_bps",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "valid_from": {
+          "name": "valid_from",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "valid_to": {
+          "name": "valid_to",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "card_rules_user_id_idx": {
+          "name": "card_rules_user_id_idx",
+          "columns": [
+            "user_id",
+            "id"
+          ],
+          "isUnique": true
+        },
+        "card_rules_card_period_idx": {
+          "name": "card_rules_card_period_idx",
+          "columns": [
+            "user_id",
+            "card_id",
+            "valid_from"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "card_rules_user_id_users_id_fk": {
+          "name": "card_rules_user_id_users_id_fk",
+          "tableFrom": "card_rules",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "card_rules_card_id_cards_id_fk": {
+          "name": "card_rules_card_id_cards_id_fk",
+          "tableFrom": "card_rules",
+          "tableTo": "cards",
+          "columnsFrom": [
+            "card_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "card_rules_card_user_fk": {
+          "name": "card_rules_card_user_fk",
+          "tableFrom": "card_rules",
+          "tableTo": "cards",
+          "columnsFrom": [
+            "user_id",
+            "card_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "card_rules_cashback_rate_bps_check": {
+          "name": "card_rules_cashback_rate_bps_check",
+          "value": "\"card_rules\".\"cashback_rate_bps\" between 0 and 10000"
+        }
+      }
+    },
+    "card_statements": {
+      "name": "card_statements",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "card_id": {
+          "name": "card_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "statement_month": {
+          "name": "statement_month",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "closing_date": {
+          "name": "closing_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "due_date": {
+          "name": "due_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "payment_transaction_id": {
+          "name": "payment_transaction_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "card_statements_user_id_idx": {
+          "name": "card_statements_user_id_idx",
+          "columns": [
+            "user_id",
+            "id"
+          ],
+          "isUnique": true
+        },
+        "card_statements_user_card_month_idx": {
+          "name": "card_statements_user_card_month_idx",
+          "columns": [
+            "user_id",
+            "card_id",
+            "statement_month"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "card_statements_user_id_users_id_fk": {
+          "name": "card_statements_user_id_users_id_fk",
+          "tableFrom": "card_statements",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "card_statements_card_id_cards_id_fk": {
+          "name": "card_statements_card_id_cards_id_fk",
+          "tableFrom": "card_statements",
+          "tableTo": "cards",
+          "columnsFrom": [
+            "card_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "card_statements_payment_transaction_id_transactions_id_fk": {
+          "name": "card_statements_payment_transaction_id_transactions_id_fk",
+          "tableFrom": "card_statements",
+          "tableTo": "transactions",
+          "columnsFrom": [
+            "payment_transaction_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "card_statements_card_user_fk": {
+          "name": "card_statements_card_user_fk",
+          "tableFrom": "card_statements",
+          "tableTo": "cards",
+          "columnsFrom": [
+            "user_id",
+            "card_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "card_statements_payment_transaction_user_fk": {
+          "name": "card_statements_payment_transaction_user_fk",
+          "tableFrom": "card_statements",
+          "tableTo": "transactions",
+          "columnsFrom": [
+            "user_id",
+            "payment_transaction_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "cards": {
+      "name": "cards",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "issuer": {
+          "name": "issuer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'ATIVO'"
+        },
+        "closing_day": {
+          "name": "closing_day",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "due_day": {
+          "name": "due_day",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "cards_user_id_idx": {
+          "name": "cards_user_id_idx",
+          "columns": [
+            "user_id",
+            "id"
+          ],
+          "isUnique": true
+        },
+        "cards_user_name_idx": {
+          "name": "cards_user_name_idx",
+          "columns": [
+            "user_id",
+            "name"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "cards_user_id_users_id_fk": {
+          "name": "cards_user_id_users_id_fk",
+          "tableFrom": "cards",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "cards_status_check": {
+          "name": "cards_status_check",
+          "value": "\"cards\".\"status\" in ('ATIVO', 'HISTORICO', 'ARQUIVADO')"
+        },
+        "cards_closing_day_check": {
+          "name": "cards_closing_day_check",
+          "value": "\"cards\".\"closing_day\" between 1 and 31"
+        },
+        "cards_due_day_check": {
+          "name": "cards_due_day_check",
+          "value": "\"cards\".\"due_day\" between 1 and 31"
+        }
+      }
+    },
+    "cashback_events": {
+      "name": "cashback_events",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "transaction_id": {
+          "name": "transaction_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "card_id": {
+          "name": "card_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "month": {
+          "name": "month",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "amount_cents": {
+          "name": "amount_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "value_type": {
+          "name": "value_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "rule_id": {
+          "name": "rule_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "contabilizable": {
+          "name": "contabilizable",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        }
+      },
+      "indexes": {
+        "cashback_events_user_id_idx": {
+          "name": "cashback_events_user_id_idx",
+          "columns": [
+            "user_id",
+            "id"
+          ],
+          "isUnique": true
+        },
+        "cashback_events_transaction_idx": {
+          "name": "cashback_events_transaction_idx",
+          "columns": [
+            "transaction_id"
+          ],
+          "isUnique": true
+        },
+        "cashback_events_user_card_month_idx": {
+          "name": "cashback_events_user_card_month_idx",
+          "columns": [
+            "user_id",
+            "card_id",
+            "month"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "cashback_events_user_id_users_id_fk": {
+          "name": "cashback_events_user_id_users_id_fk",
+          "tableFrom": "cashback_events",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "cashback_events_transaction_id_transactions_id_fk": {
+          "name": "cashback_events_transaction_id_transactions_id_fk",
+          "tableFrom": "cashback_events",
+          "tableTo": "transactions",
+          "columnsFrom": [
+            "transaction_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "cashback_events_card_id_cards_id_fk": {
+          "name": "cashback_events_card_id_cards_id_fk",
+          "tableFrom": "cashback_events",
+          "tableTo": "cards",
+          "columnsFrom": [
+            "card_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "cashback_events_rule_id_card_rules_id_fk": {
+          "name": "cashback_events_rule_id_card_rules_id_fk",
+          "tableFrom": "cashback_events",
+          "tableTo": "card_rules",
+          "columnsFrom": [
+            "rule_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "cashback_events_transaction_user_fk": {
+          "name": "cashback_events_transaction_user_fk",
+          "tableFrom": "cashback_events",
+          "tableTo": "transactions",
+          "columnsFrom": [
+            "user_id",
+            "transaction_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "cashback_events_card_user_fk": {
+          "name": "cashback_events_card_user_fk",
+          "tableFrom": "cashback_events",
+          "tableTo": "cards",
+          "columnsFrom": [
+            "user_id",
+            "card_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "cashback_events_rule_user_fk": {
+          "name": "cashback_events_rule_user_fk",
+          "tableFrom": "cashback_events",
+          "tableTo": "card_rules",
+          "columnsFrom": [
+            "user_id",
+            "rule_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "cashback_events_value_type_check": {
+          "name": "cashback_events_value_type_check",
+          "value": "\"cashback_events\".\"value_type\" in ('REAL', 'ESTIMADO')"
+        },
+        "cashback_events_amount_cents_check": {
+          "name": "cashback_events_amount_cents_check",
+          "value": "\"cashback_events\".\"amount_cents\" >= 0"
+        },
+        "cashback_events_contabilizable_check": {
+          "name": "cashback_events_contabilizable_check",
+          "value": "\"cashback_events\".\"contabilizable\" in (0, 1)"
+        },
+        "cashback_events_value_consistency_check": {
+          "name": "cashback_events_value_consistency_check",
+          "value": "((\"cashback_events\".\"value_type\" = 'ESTIMADO' and \"cashback_events\".\"transaction_id\" is null and \"cashback_events\".\"contabilizable\" = 0) or (\"cashback_events\".\"value_type\" = 'REAL' and \"cashback_events\".\"transaction_id\" is not null and \"cashback_events\".\"contabilizable\" = 1))"
+        }
+      }
+    },
+    "categories": {
+      "name": "categories",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "parent_id": {
+          "name": "parent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "counts_as_living_cost": {
+          "name": "counts_as_living_cost",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "active": {
+          "name": "active",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        }
+      },
+      "indexes": {
+        "categories_user_id_idx": {
+          "name": "categories_user_id_idx",
+          "columns": [
+            "user_id",
+            "id"
+          ],
+          "isUnique": true
+        },
+        "categories_user_name_idx": {
+          "name": "categories_user_name_idx",
+          "columns": [
+            "user_id",
+            "name"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "categories_user_id_users_id_fk": {
+          "name": "categories_user_id_users_id_fk",
+          "tableFrom": "categories",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "categories_parent_user_fk": {
+          "name": "categories_parent_user_fk",
+          "tableFrom": "categories",
+          "tableTo": "categories",
+          "columnsFrom": [
+            "user_id",
+            "parent_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "categories_parent_not_self_check": {
+          "name": "categories_parent_not_self_check",
+          "value": "\"categories\".\"parent_id\" is null or \"categories\".\"parent_id\" <> \"categories\".\"id\""
+        }
+      }
+    },
+    "classification_rules": {
+      "name": "classification_rules",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "pattern": {
+          "name": "pattern",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "nature": {
+          "name": "nature",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "subtype": {
+          "name": "subtype",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "origin": {
+          "name": "origin",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "category_id": {
+          "name": "category_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "confidence": {
+          "name": "confidence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "active": {
+          "name": "active",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        }
+      },
+      "indexes": {
+        "classification_rules_user_id_idx": {
+          "name": "classification_rules_user_id_idx",
+          "columns": [
+            "user_id",
+            "id"
+          ],
+          "isUnique": true
+        },
+        "classification_rules_user_pattern_idx": {
+          "name": "classification_rules_user_pattern_idx",
+          "columns": [
+            "user_id",
+            "pattern"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "classification_rules_user_id_users_id_fk": {
+          "name": "classification_rules_user_id_users_id_fk",
+          "tableFrom": "classification_rules",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "classification_rules_category_id_categories_id_fk": {
+          "name": "classification_rules_category_id_categories_id_fk",
+          "tableFrom": "classification_rules",
+          "tableTo": "categories",
+          "columnsFrom": [
+            "category_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "classification_rules_category_user_fk": {
+          "name": "classification_rules_category_user_fk",
+          "tableFrom": "classification_rules",
+          "tableTo": "categories",
+          "columnsFrom": [
+            "user_id",
+            "category_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "classification_rules_nature_check": {
+          "name": "classification_rules_nature_check",
+          "value": "\"classification_rules\".\"nature\" in ('DESPESA', 'RECEITA', 'TRANSFERENCIA', 'INVESTIMENTO')"
+        },
+        "classification_rules_subtype_check": {
+          "name": "classification_rules_subtype_check",
+          "value": "\"classification_rules\".\"subtype\" in ('COMPRA', 'APORTE', 'REINVESTIMENTO', 'PAGAMENTO_FATURA', 'TRANSFERENCIA_RESERVA', 'DIVIDENDO', 'CASHBACK', 'RENDIMENTO', 'AJUSTE')"
+        },
+        "classification_rules_origin_check": {
+          "name": "classification_rules_origin_check",
+          "value": "\"classification_rules\".\"origin\" in ('CONTA', 'CARTAO', 'CAIXINHA', 'IMPORTACAO', 'MANUAL')"
+        },
+        "classification_rules_confidence_check": {
+          "name": "classification_rules_confidence_check",
+          "value": "\"classification_rules\".\"confidence\" between 0 and 100"
+        }
+      }
+    },
+    "dividend_events": {
+      "name": "dividend_events",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "transaction_id": {
+          "name": "transaction_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "asset_id": {
+          "name": "asset_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "declared_date": {
+          "name": "declared_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "payment_date": {
+          "name": "payment_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "dividend_events_user_id_idx": {
+          "name": "dividend_events_user_id_idx",
+          "columns": [
+            "user_id",
+            "id"
+          ],
+          "isUnique": true
+        },
+        "dividend_events_transaction_idx": {
+          "name": "dividend_events_transaction_idx",
+          "columns": [
+            "transaction_id"
+          ],
+          "isUnique": true
+        },
+        "dividend_events_user_asset_payment_idx": {
+          "name": "dividend_events_user_asset_payment_idx",
+          "columns": [
+            "user_id",
+            "asset_id",
+            "payment_date"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "dividend_events_user_id_users_id_fk": {
+          "name": "dividend_events_user_id_users_id_fk",
+          "tableFrom": "dividend_events",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "dividend_events_transaction_id_transactions_id_fk": {
+          "name": "dividend_events_transaction_id_transactions_id_fk",
+          "tableFrom": "dividend_events",
+          "tableTo": "transactions",
+          "columnsFrom": [
+            "transaction_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "dividend_events_asset_id_assets_id_fk": {
+          "name": "dividend_events_asset_id_assets_id_fk",
+          "tableFrom": "dividend_events",
+          "tableTo": "assets",
+          "columnsFrom": [
+            "asset_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "dividend_events_transaction_user_fk": {
+          "name": "dividend_events_transaction_user_fk",
+          "tableFrom": "dividend_events",
+          "tableTo": "transactions",
+          "columnsFrom": [
+            "user_id",
+            "transaction_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "dividend_events_asset_user_fk": {
+          "name": "dividend_events_asset_user_fk",
+          "tableFrom": "dividend_events",
+          "tableTo": "assets",
+          "columnsFrom": [
+            "user_id",
+            "asset_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "exchange_rates": {
+      "name": "exchange_rates",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "base_currency": {
+          "name": "base_currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "quote_currency": {
+          "name": "quote_currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "rate_decimal": {
+          "name": "rate_decimal",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reference_date": {
+          "name": "reference_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fetched_at": {
+          "name": "fetched_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "is_stale": {
+          "name": "is_stale",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "source_hash": {
+          "name": "source_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "exchange_rates_user_id_idx": {
+          "name": "exchange_rates_user_id_idx",
+          "columns": [
+            "user_id",
+            "id"
+          ],
+          "isUnique": true
+        },
+        "exchange_rates_user_pair_reference_idx": {
+          "name": "exchange_rates_user_pair_reference_idx",
+          "columns": [
+            "user_id",
+            "base_currency",
+            "quote_currency",
+            "reference_date"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "exchange_rates_user_id_users_id_fk": {
+          "name": "exchange_rates_user_id_users_id_fk",
+          "tableFrom": "exchange_rates",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "exchange_rates_currency_pair_check": {
+          "name": "exchange_rates_currency_pair_check",
+          "value": "length(\"exchange_rates\".\"base_currency\") = 3 and length(\"exchange_rates\".\"quote_currency\") = 3 and \"exchange_rates\".\"base_currency\" <> \"exchange_rates\".\"quote_currency\""
+        },
+        "exchange_rates_is_stale_check": {
+          "name": "exchange_rates_is_stale_check",
+          "value": "\"exchange_rates\".\"is_stale\" in (0, 1)"
+        },
+        "exchange_rates_rate_decimal_check": {
+          "name": "exchange_rates_rate_decimal_check",
+          "value": "cast(\"exchange_rates\".\"rate_decimal\" as real) > 0"
+        }
+      }
+    },
+    "import_batches": {
+      "name": "import_batches",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_file_name": {
+          "name": "source_file_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_file_size": {
+          "name": "source_file_size",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "file_hash": {
+          "name": "file_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "parser_version": {
+          "name": "parser_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'STAGED'"
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "confirmed_at": {
+          "name": "confirmed_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "confirmed_by": {
+          "name": "confirmed_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "error_summary": {
+          "name": "error_summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rows_total": {
+          "name": "rows_total",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "rows_accepted": {
+          "name": "rows_accepted",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "rows_rejected": {
+          "name": "rows_rejected",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "rows_pending": {
+          "name": "rows_pending",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        }
+      },
+      "indexes": {
+        "import_batches_user_id_idx": {
+          "name": "import_batches_user_id_idx",
+          "columns": [
+            "user_id",
+            "id"
+          ],
+          "isUnique": true
+        },
+        "import_batches_user_file_hash_idx": {
+          "name": "import_batches_user_file_hash_idx",
+          "columns": [
+            "user_id",
+            "file_hash"
+          ],
+          "isUnique": false
+        },
+        "import_batches_user_active_file_hash_idx": {
+          "name": "import_batches_user_active_file_hash_idx",
+          "columns": [
+            "user_id",
+            "file_hash"
+          ],
+          "isUnique": true,
+          "where": "\"import_batches\".\"status\" in ('STAGED', 'READY_FOR_REVIEW', 'CONFIRMED')"
+        }
+      },
+      "foreignKeys": {
+        "import_batches_user_id_users_id_fk": {
+          "name": "import_batches_user_id_users_id_fk",
+          "tableFrom": "import_batches",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "import_batches_confirmed_by_users_id_fk": {
+          "name": "import_batches_confirmed_by_users_id_fk",
+          "tableFrom": "import_batches",
+          "tableTo": "users",
+          "columnsFrom": [
+            "confirmed_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "import_batches_status_check": {
+          "name": "import_batches_status_check",
+          "value": "\"import_batches\".\"status\" in ('STAGED', 'READY_FOR_REVIEW', 'CONFIRMED', 'FAILED', 'ROLLED_BACK')"
+        },
+        "import_batches_source_file_size_check": {
+          "name": "import_batches_source_file_size_check",
+          "value": "\"import_batches\".\"source_file_size\" >= 0"
+        },
+        "import_batches_counters_check": {
+          "name": "import_batches_counters_check",
+          "value": "\"import_batches\".\"rows_total\" >= 0 and \"import_batches\".\"rows_accepted\" >= 0 and \"import_batches\".\"rows_rejected\" >= 0 and \"import_batches\".\"rows_pending\" >= 0"
+        },
+        "import_batches_confirmed_audit_check": {
+          "name": "import_batches_confirmed_audit_check",
+          "value": "((\"import_batches\".\"status\" = 'CONFIRMED' and \"import_batches\".\"confirmed_at\" is not null and \"import_batches\".\"confirmed_by\" is not null and \"import_batches\".\"confirmed_by\" = \"import_batches\".\"user_id\") or (\"import_batches\".\"status\" <> 'CONFIRMED' and \"import_batches\".\"confirmed_at\" is null and \"import_batches\".\"confirmed_by\" is null))"
+        }
+      }
+    },
+    "import_rows": {
+      "name": "import_rows",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "batch_id": {
+          "name": "batch_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sheet_name": {
+          "name": "sheet_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cell_ref": {
+          "name": "cell_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "raw_label": {
+          "name": "raw_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "raw_value": {
+          "name": "raw_value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "raw_row_hash": {
+          "name": "raw_row_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "logical_fingerprint": {
+          "name": "logical_fingerprint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "suggested_nature": {
+          "name": "suggested_nature",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "suggested_subtype": {
+          "name": "suggested_subtype",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "suggested_origin": {
+          "name": "suggested_origin",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "classification_status": {
+          "name": "classification_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "normalized_amount_cents": {
+          "name": "normalized_amount_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'PENDENTE'"
+        },
+        "issue": {
+          "name": "issue",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "transaction_id": {
+          "name": "transaction_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "import_rows_user_id_idx": {
+          "name": "import_rows_user_id_idx",
+          "columns": [
+            "user_id",
+            "id"
+          ],
+          "isUnique": true
+        },
+        "import_rows_user_batch_row_hash_idx": {
+          "name": "import_rows_user_batch_row_hash_idx",
+          "columns": [
+            "user_id",
+            "batch_id",
+            "raw_row_hash"
+          ],
+          "isUnique": true
+        },
+        "import_rows_user_logical_fingerprint_idx": {
+          "name": "import_rows_user_logical_fingerprint_idx",
+          "columns": [
+            "user_id",
+            "logical_fingerprint"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "import_rows_user_id_users_id_fk": {
+          "name": "import_rows_user_id_users_id_fk",
+          "tableFrom": "import_rows",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "import_rows_batch_id_import_batches_id_fk": {
+          "name": "import_rows_batch_id_import_batches_id_fk",
+          "tableFrom": "import_rows",
+          "tableTo": "import_batches",
+          "columnsFrom": [
+            "batch_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "import_rows_transaction_id_transactions_id_fk": {
+          "name": "import_rows_transaction_id_transactions_id_fk",
+          "tableFrom": "import_rows",
+          "tableTo": "transactions",
+          "columnsFrom": [
+            "transaction_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "import_rows_batch_user_fk": {
+          "name": "import_rows_batch_user_fk",
+          "tableFrom": "import_rows",
+          "tableTo": "import_batches",
+          "columnsFrom": [
+            "user_id",
+            "batch_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "import_rows_transaction_user_fk": {
+          "name": "import_rows_transaction_user_fk",
+          "tableFrom": "import_rows",
+          "tableTo": "transactions",
+          "columnsFrom": [
+            "user_id",
+            "transaction_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "import_rows_suggested_nature_check": {
+          "name": "import_rows_suggested_nature_check",
+          "value": "\"import_rows\".\"suggested_nature\" is null or \"import_rows\".\"suggested_nature\" in ('DESPESA', 'RECEITA', 'TRANSFERENCIA', 'INVESTIMENTO')"
+        },
+        "import_rows_suggested_subtype_check": {
+          "name": "import_rows_suggested_subtype_check",
+          "value": "\"import_rows\".\"suggested_subtype\" is null or \"import_rows\".\"suggested_subtype\" in ('COMPRA', 'APORTE', 'REINVESTIMENTO', 'PAGAMENTO_FATURA', 'TRANSFERENCIA_RESERVA', 'DIVIDENDO', 'CASHBACK', 'RENDIMENTO', 'AJUSTE')"
+        },
+        "import_rows_suggested_origin_check": {
+          "name": "import_rows_suggested_origin_check",
+          "value": "\"import_rows\".\"suggested_origin\" is null or \"import_rows\".\"suggested_origin\" in ('CONTA', 'CARTAO', 'CAIXINHA', 'IMPORTACAO', 'MANUAL')"
+        },
+        "import_rows_classification_status_check": {
+          "name": "import_rows_classification_status_check",
+          "value": "\"import_rows\".\"classification_status\" in ('CONFIRMADO', 'ESTIMADO', 'PENDENTE_REVISAO', 'REJEITADO')"
+        },
+        "import_rows_status_check": {
+          "name": "import_rows_status_check",
+          "value": "\"import_rows\".\"status\" in ('PENDENTE', 'ACEITO', 'REJEITADO', 'CONFIRMADO')"
+        },
+        "import_rows_normalized_amount_cents_check": {
+          "name": "import_rows_normalized_amount_cents_check",
+          "value": "\"import_rows\".\"normalized_amount_cents\" is null or \"import_rows\".\"normalized_amount_cents\" >= 0"
+        }
+      }
+    },
+    "investment_events": {
+      "name": "investment_events",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "transaction_id": {
+          "name": "transaction_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "asset_id": {
+          "name": "asset_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "quantity_decimal": {
+          "name": "quantity_decimal",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "unit_price_decimal": {
+          "name": "unit_price_decimal",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "exchange_rate_decimal": {
+          "name": "exchange_rate_decimal",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "gross_amount_cents": {
+          "name": "gross_amount_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "investment_events_user_id_idx": {
+          "name": "investment_events_user_id_idx",
+          "columns": [
+            "user_id",
+            "id"
+          ],
+          "isUnique": true
+        },
+        "investment_events_transaction_idx": {
+          "name": "investment_events_transaction_idx",
+          "columns": [
+            "transaction_id"
+          ],
+          "isUnique": true
+        },
+        "investment_events_user_asset_idx": {
+          "name": "investment_events_user_asset_idx",
+          "columns": [
+            "user_id",
+            "asset_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "investment_events_user_id_users_id_fk": {
+          "name": "investment_events_user_id_users_id_fk",
+          "tableFrom": "investment_events",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "investment_events_transaction_id_transactions_id_fk": {
+          "name": "investment_events_transaction_id_transactions_id_fk",
+          "tableFrom": "investment_events",
+          "tableTo": "transactions",
+          "columnsFrom": [
+            "transaction_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "investment_events_asset_id_assets_id_fk": {
+          "name": "investment_events_asset_id_assets_id_fk",
+          "tableFrom": "investment_events",
+          "tableTo": "assets",
+          "columnsFrom": [
+            "asset_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "investment_events_transaction_user_fk": {
+          "name": "investment_events_transaction_user_fk",
+          "tableFrom": "investment_events",
+          "tableTo": "transactions",
+          "columnsFrom": [
+            "user_id",
+            "transaction_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "investment_events_asset_user_fk": {
+          "name": "investment_events_asset_user_fk",
+          "tableFrom": "investment_events",
+          "tableTo": "assets",
+          "columnsFrom": [
+            "user_id",
+            "asset_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "investment_events_gross_amount_cents_check": {
+          "name": "investment_events_gross_amount_cents_check",
+          "value": "\"investment_events\".\"gross_amount_cents\" >= 0"
+        }
+      }
+    },
+    "reserve_earnings": {
+      "name": "reserve_earnings",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "transaction_id": {
+          "name": "transaction_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "month": {
+          "name": "month",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "reserve_earnings_user_id_idx": {
+          "name": "reserve_earnings_user_id_idx",
+          "columns": [
+            "user_id",
+            "id"
+          ],
+          "isUnique": true
+        },
+        "reserve_earnings_transaction_idx": {
+          "name": "reserve_earnings_transaction_idx",
+          "columns": [
+            "transaction_id"
+          ],
+          "isUnique": true
+        },
+        "reserve_earnings_user_account_month_idx": {
+          "name": "reserve_earnings_user_account_month_idx",
+          "columns": [
+            "user_id",
+            "account_id",
+            "month"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "reserve_earnings_user_id_users_id_fk": {
+          "name": "reserve_earnings_user_id_users_id_fk",
+          "tableFrom": "reserve_earnings",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "reserve_earnings_transaction_id_transactions_id_fk": {
+          "name": "reserve_earnings_transaction_id_transactions_id_fk",
+          "tableFrom": "reserve_earnings",
+          "tableTo": "transactions",
+          "columnsFrom": [
+            "transaction_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "reserve_earnings_account_id_accounts_id_fk": {
+          "name": "reserve_earnings_account_id_accounts_id_fk",
+          "tableFrom": "reserve_earnings",
+          "tableTo": "accounts",
+          "columnsFrom": [
+            "account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "reserve_earnings_transaction_user_fk": {
+          "name": "reserve_earnings_transaction_user_fk",
+          "tableFrom": "reserve_earnings",
+          "tableTo": "transactions",
+          "columnsFrom": [
+            "user_id",
+            "transaction_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "reserve_earnings_account_user_fk": {
+          "name": "reserve_earnings_account_user_fk",
+          "tableFrom": "reserve_earnings",
+          "tableTo": "accounts",
+          "columnsFrom": [
+            "user_id",
+            "account_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "transactions": {
+      "name": "transactions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "nature": {
+          "name": "nature",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "subtype": {
+          "name": "subtype",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "origin": {
+          "name": "origin",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "classification_status": {
+          "name": "classification_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "transaction_status": {
+          "name": "transaction_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'ACTIVE'"
+        },
+        "category_id": {
+          "name": "category_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "source_account_id": {
+          "name": "source_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "target_account_id": {
+          "name": "target_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "card_id": {
+          "name": "card_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "asset_id": {
+          "name": "asset_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "date": {
+          "name": "date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "competence_month": {
+          "name": "competence_month",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "amount_cents": {
+          "name": "amount_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "currency": {
+          "name": "currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'BRL'"
+        },
+        "direction": {
+          "name": "direction",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_hash": {
+          "name": "source_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "logical_fingerprint": {
+          "name": "logical_fingerprint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "voided_at": {
+          "name": "voided_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "voided_by": {
+          "name": "voided_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reversal_transaction_id": {
+          "name": "reversal_transaction_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'1970-01-01T00:00:00.000Z'"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'1970-01-01T00:00:00.000Z'"
+        }
+      },
+      "indexes": {
+        "transactions_user_id_idx": {
+          "name": "transactions_user_id_idx",
+          "columns": [
+            "user_id",
+            "id"
+          ],
+          "isUnique": true
+        },
+        "transactions_user_date_idx": {
+          "name": "transactions_user_date_idx",
+          "columns": [
+            "user_id",
+            "date"
+          ],
+          "isUnique": false
+        },
+        "transactions_user_competence_idx": {
+          "name": "transactions_user_competence_idx",
+          "columns": [
+            "user_id",
+            "competence_month"
+          ],
+          "isUnique": false
+        },
+        "transactions_user_classification_idx": {
+          "name": "transactions_user_classification_idx",
+          "columns": [
+            "user_id",
+            "nature",
+            "subtype",
+            "competence_month"
+          ],
+          "isUnique": false
+        },
+        "transactions_user_source_hash_idx": {
+          "name": "transactions_user_source_hash_idx",
+          "columns": [
+            "user_id",
+            "source_hash"
+          ],
+          "isUnique": true
+        },
+        "transactions_user_logical_fingerprint_idx": {
+          "name": "transactions_user_logical_fingerprint_idx",
+          "columns": [
+            "user_id",
+            "logical_fingerprint"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "transactions_user_id_users_id_fk": {
+          "name": "transactions_user_id_users_id_fk",
+          "tableFrom": "transactions",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "transactions_category_id_categories_id_fk": {
+          "name": "transactions_category_id_categories_id_fk",
+          "tableFrom": "transactions",
+          "tableTo": "categories",
+          "columnsFrom": [
+            "category_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "transactions_source_account_id_accounts_id_fk": {
+          "name": "transactions_source_account_id_accounts_id_fk",
+          "tableFrom": "transactions",
+          "tableTo": "accounts",
+          "columnsFrom": [
+            "source_account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "transactions_target_account_id_accounts_id_fk": {
+          "name": "transactions_target_account_id_accounts_id_fk",
+          "tableFrom": "transactions",
+          "tableTo": "accounts",
+          "columnsFrom": [
+            "target_account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "transactions_card_id_cards_id_fk": {
+          "name": "transactions_card_id_cards_id_fk",
+          "tableFrom": "transactions",
+          "tableTo": "cards",
+          "columnsFrom": [
+            "card_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "transactions_asset_id_assets_id_fk": {
+          "name": "transactions_asset_id_assets_id_fk",
+          "tableFrom": "transactions",
+          "tableTo": "assets",
+          "columnsFrom": [
+            "asset_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "transactions_voided_by_users_id_fk": {
+          "name": "transactions_voided_by_users_id_fk",
+          "tableFrom": "transactions",
+          "tableTo": "users",
+          "columnsFrom": [
+            "voided_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "transactions_category_user_fk": {
+          "name": "transactions_category_user_fk",
+          "tableFrom": "transactions",
+          "tableTo": "categories",
+          "columnsFrom": [
+            "user_id",
+            "category_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "transactions_source_account_user_fk": {
+          "name": "transactions_source_account_user_fk",
+          "tableFrom": "transactions",
+          "tableTo": "accounts",
+          "columnsFrom": [
+            "user_id",
+            "source_account_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "transactions_target_account_user_fk": {
+          "name": "transactions_target_account_user_fk",
+          "tableFrom": "transactions",
+          "tableTo": "accounts",
+          "columnsFrom": [
+            "user_id",
+            "target_account_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "transactions_card_user_fk": {
+          "name": "transactions_card_user_fk",
+          "tableFrom": "transactions",
+          "tableTo": "cards",
+          "columnsFrom": [
+            "user_id",
+            "card_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "transactions_asset_user_fk": {
+          "name": "transactions_asset_user_fk",
+          "tableFrom": "transactions",
+          "tableTo": "assets",
+          "columnsFrom": [
+            "user_id",
+            "asset_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "transactions_reversal_user_fk": {
+          "name": "transactions_reversal_user_fk",
+          "tableFrom": "transactions",
+          "tableTo": "transactions",
+          "columnsFrom": [
+            "user_id",
+            "reversal_transaction_id"
+          ],
+          "columnsTo": [
+            "user_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "transactions_nature_check": {
+          "name": "transactions_nature_check",
+          "value": "\"transactions\".\"nature\" in ('DESPESA', 'RECEITA', 'TRANSFERENCIA', 'INVESTIMENTO')"
+        },
+        "transactions_subtype_check": {
+          "name": "transactions_subtype_check",
+          "value": "\"transactions\".\"subtype\" in ('COMPRA', 'APORTE', 'REINVESTIMENTO', 'PAGAMENTO_FATURA', 'TRANSFERENCIA_RESERVA', 'DIVIDENDO', 'CASHBACK', 'RENDIMENTO', 'AJUSTE')"
+        },
+        "transactions_origin_check": {
+          "name": "transactions_origin_check",
+          "value": "\"transactions\".\"origin\" in ('CONTA', 'CARTAO', 'CAIXINHA', 'IMPORTACAO', 'MANUAL')"
+        },
+        "transactions_classification_status_check": {
+          "name": "transactions_classification_status_check",
+          "value": "\"transactions\".\"classification_status\" in ('CONFIRMADO', 'ESTIMADO', 'PENDENTE_REVISAO', 'REJEITADO')"
+        },
+        "transactions_transaction_status_check": {
+          "name": "transactions_transaction_status_check",
+          "value": "\"transactions\".\"transaction_status\" in ('ACTIVE', 'CANCELADO', 'ESTORNADO')"
+        },
+        "transactions_direction_check": {
+          "name": "transactions_direction_check",
+          "value": "\"transactions\".\"direction\" in ('INFLOW', 'OUTFLOW', 'TRANSFER_OUT', 'TRANSFER_IN', 'NEUTRAL')"
+        },
+        "transactions_currency_check": {
+          "name": "transactions_currency_check",
+          "value": "length(\"transactions\".\"currency\") = 3"
+        },
+        "transactions_amount_cents_check": {
+          "name": "transactions_amount_cents_check",
+          "value": "\"transactions\".\"amount_cents\" >= 0"
+        },
+        "transactions_reversal_not_self_check": {
+          "name": "transactions_reversal_not_self_check",
+          "value": "\"transactions\".\"reversal_transaction_id\" is null or \"transactions\".\"reversal_transaction_id\" <> \"transactions\".\"id\""
+        },
+        "transactions_voided_audit_check": {
+          "name": "transactions_voided_audit_check",
+          "value": "((\"transactions\".\"voided_at\" is null and \"transactions\".\"voided_by\" is null) or (\"transactions\".\"voided_at\" is not null and \"transactions\".\"voided_by\" is not null and \"transactions\".\"voided_by\" = \"transactions\".\"user_id\"))"
+        }
+      }
+    },
+    "users": {
+      "name": "users",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "users_email_idx": {
+          "name": "users_email_idx",
+          "columns": [
+            "email"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}

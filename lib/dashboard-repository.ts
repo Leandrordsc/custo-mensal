@@ -1,6 +1,8 @@
 import { DatabaseSync } from "node:sqlite";
 import { requireAuthenticatedUser, type AuthenticatedUserContext } from "./auth-context.ts";
 import { calculateDashboardSummary, isCardPurchase, type DashboardPeriod, type DashboardSummary, type DashboardTransaction, type EstimatedCashback } from "./dashboard-rules.ts";
+import type { InvestmentOverview } from "./investment-service.ts";
+import { InvestmentService } from "./investment-service.ts";
 
 export type DashboardRepository = {
   getDashboardSummary(context: AuthenticatedUserContext, period: DashboardPeriod): DashboardSummary;
@@ -11,6 +13,7 @@ export type DashboardOverview = {
   summary: DashboardSummary;
   monthlySeries: DashboardMonthSummary[];
   categories: DashboardCategorySummary[];
+  investments: InvestmentOverview;
   transactionCount: number;
   countableTransactionCount: number;
   hasTransactions: boolean;
@@ -56,9 +59,11 @@ type EstimatedCashbackRow = {
 
 export class SQLiteDashboardRepository implements DashboardRepository {
   private readonly db: DatabaseSync;
+  private readonly investmentService: InvestmentService;
 
-  constructor(db: DatabaseSync) {
+  constructor(db: DatabaseSync, investmentService = new InvestmentService(db)) {
     this.db = db;
+    this.investmentService = investmentService;
   }
 
   getDashboardSummary(context: AuthenticatedUserContext, period: DashboardPeriod): DashboardSummary {
@@ -113,6 +118,7 @@ export class SQLiteDashboardRepository implements DashboardRepository {
       summary,
       monthlySeries: buildMonthlySeries(period, mappedTransactions),
       categories: buildCategorySummary(mappedTransactions),
+      investments: this.investmentService.getOverview(context, period),
       transactionCount: transactions.length,
       countableTransactionCount: countDashboardActivities(mappedTransactions, estimatedCashbacks.length),
       hasTransactions: transactions.length > 0,

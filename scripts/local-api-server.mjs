@@ -2,13 +2,15 @@ import { createServer } from "node:http";
 import { CardService } from "../lib/card-service.ts";
 import { SQLiteDashboardRepository } from "../lib/dashboard-repository.ts";
 import { ExpenseService } from "../lib/expense-service.ts";
+import { InvestmentService } from "../lib/investment-service.ts";
 import { getLocalAuthenticatedUser } from "../lib/local-auth.ts";
 import { getLocalDatabasePath, openLocalDatabase } from "../lib/local-db.ts";
 
 export function createLocalApiHandler({ db, context = getLocalAuthenticatedUser() }) {
   const service = new ExpenseService(db);
   const cardService = new CardService(db);
-  const dashboardRepository = new SQLiteDashboardRepository(db);
+  const investmentService = new InvestmentService(db);
+  const dashboardRepository = new SQLiteDashboardRepository(db, investmentService);
 
   return async function handle(request) {
     try {
@@ -27,6 +29,9 @@ export function createLocalApiHandler({ db, context = getLocalAuthenticatedUser(
       }
       if (request.method === "GET" && path === "/api/cards/overview") {
         return jsonResponse(cardService.getOverview(context, parseDashboardPeriod(url)));
+      }
+      if (request.method === "GET" && path === "/api/investments/overview") {
+        return jsonResponse(investmentService.getOverview(context, parseDashboardPeriod(url)));
       }
       if (request.method === "GET" && path === "/api/costs/bases") {
         return jsonResponse(service.listBases(context));
