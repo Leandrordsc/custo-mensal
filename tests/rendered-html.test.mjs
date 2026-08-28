@@ -109,6 +109,8 @@ test("codigo renderizado contem controles de cadastro manual de ativos", () => {
   const source = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
 
   assert.match(source, /Abas de Ativos e Proventos/);
+  assert.match(source, /Incluir ativo/);
+  assert.match(source, /Incluir primeiro ativo/);
   assert.match(source, /role="tablist"/);
   assert.match(source, /aria-selected/);
   assert.match(source, /Carteira/);

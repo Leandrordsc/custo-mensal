@@ -272,6 +272,10 @@ function PageHeader({ eyebrow, title, text, year }: { eyebrow: string; title: st
   return <section className="page-header"><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><span>{text}</span></div><Badge>{year}</Badge></section>;
 }
 
+function ActionHeader({ eyebrow, title, note, action }: { eyebrow: string; title: string; note: string; action?: ReactNode }) {
+  return <section className="section-head"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2><span>{note}</span></div>{action && <div className="section-actions">{action}</div>}</section>;
+}
+
 function Badge({ children, tone = "neutral" }: { children: ReactNode; tone?: string }) {
   return <span className={`status-badge ${tone}`}>{children}</span>;
 }
@@ -683,6 +687,11 @@ function InvestmentsConnectedView({ year }: { year: string }) {
   const selectedOperationAsset = bases.assets.find((asset) => asset.id === operationForm.assetId);
   const operationCurrency = operationForm.assetMode === "novo" ? operationForm.currency : (selectedOperationAsset?.currency as "BRL" | "USD" | undefined) ?? "BRL";
 
+  function startNewAssetFlow() {
+    setActiveTab("Operacoes");
+    setOperationForm((current) => ({ ...current, assetMode: "novo", operationType: "COMPRA", subtype: "APORTE" }));
+  }
+
   const loadInvestments = useCallback(async (clearNotice = true) => {
     setLoading(true);
     setError(null);
@@ -784,7 +793,12 @@ function InvestmentsConnectedView({ year }: { year: string }) {
 
   return (
     <>
-      <section className="section-head"><div><p className="eyebrow">Ativos SQLite</p><h2>Ativos e proventos multi-moeda</h2></div><span>Brasil em BRL, EUA em USD e consolidado em BRL por cotacao registrada.</span></section>
+      <ActionHeader
+        eyebrow="Ativos SQLite"
+        title="Ativos e proventos multi-moeda"
+        note="Brasil em BRL, EUA em USD e consolidado em BRL por cotacao registrada."
+        action={<button className="primary inline-action" onClick={startNewAssetFlow} disabled={loading || Boolean(error)}>Incluir ativo</button>}
+      />
       <section className="costs-toolbar">
         <select aria-label="Periodo de Ativos" value={month} onChange={(event) => setMonth(event.target.value)}>
           <option value="all">Ano inteiro</option>
@@ -797,7 +811,7 @@ function InvestmentsConnectedView({ year }: { year: string }) {
       <div className="tabs" role="tablist" aria-label="Abas de Ativos e Proventos">
         {["Carteira", "Operacoes", "Cotacoes", "Cambio", "Proventos"].map((tab) => <button key={tab} role="tab" aria-selected={activeTab === tab} aria-controls={`ativos-panel-${tab.toLowerCase()}`} className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>{tab}</button>)}
       </div>
-      {!loading && !error && !overview.hasAssets && <EmptyState title="Nenhum ativo persistido encontrado." action="Abra a aba Operacoes e cadastre uma compra manual." />}
+      {!loading && !error && !overview.hasAssets && <div className="empty-dashboard actionable"><strong>Nenhum ativo persistido encontrado.</strong><span>Comece cadastrando o ativo e a primeira compra no mesmo formulario.</span><button className="primary inline-action" onClick={startNewAssetFlow}>Incluir primeiro ativo</button></div>}
       {overview.alerts.length > 0 && <p className="error-banner">{overview.alerts.map((alert) => alert.message).join(" ")}</p>}
       <section className="kpi-grid">
         <Kpi title="Valor atual BRL" value={fmt(overviewBrl.currentValueCents / 100)} tone="green" />
