@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { allocation, annualCostSheets, cardRows, cardYield, dividends, dividendTotals, getYearSheet, hasDetailedExpenseRows, importIssues, monthlyTotals, months, sum } from "@/lib/finance-data";
 import { assertDashboardOverview, assertInvestmentOverview, dividendTotalForPosition, emptyInvestmentOverview, totalForCurrency, type DashboardOverview, type InvestmentOverview } from "@/lib/investment-view-model";
 
@@ -229,21 +229,32 @@ export default function Home() {
   const [year, setYear] = useState("2026");
   const [search, setSearch] = useState("");
   const years = annualCostSheets.map((sheet) => String(sheet.year));
+  const pageCopy: Record<string, { eyebrow: string; title: string; text: string }> = {
+    Dashboard: { eyebrow: "Visao geral", title: "Controle financeiro pessoal", text: "Saidas, cartoes, investimentos, dividendos e pendencias sem dupla contagem." },
+    Custos: { eyebrow: "Custos", title: "Despesas do mes", text: "Compras no cartao entram como despesa; pagamento de fatura fica separado." },
+    [menu[2]]: { eyebrow: "Cartoes", title: "Faturas e cashback", text: "BTG, Mercado Pago e historico preservado com cashback real separado do estimado." },
+    "Ativos e Proventos": { eyebrow: "Carteira", title: "Ativos e proventos", text: "Brasil em BRL, EUA em USD e consolidado em BRL quando houver cambio." },
+  };
+  const currentPage = pageCopy[active] ?? pageCopy.Dashboard;
 
   return (
     <main className="app-shell">
       <aside className="side-menu">
-        <div className="brand-mark">CM</div>
-        {menu.map((item) => <button key={item} className={active === item ? "active" : ""} onClick={() => setActive(item)}>{item}</button>)}
+        <div className="brand-lockup"><div className="brand-mark">CM</div><div><strong>Custo Mensal</strong><span>Piloto local</span></div></div>
+        {menu.map((item) => <button key={item} className={active === item ? "active" : ""} aria-current={active === item ? "page" : undefined} onClick={() => setActive(item)}>{item}</button>)}
       </aside>
       <section className="workbench">
         <header className="topbar">
+          <div className="topbar-title"><strong>Custo Mensal</strong><span>SQLite local</span></div>
           <input aria-label="Pesquisar" placeholder="Pesquisar ticker, custo ou lançamento..." value={search} onChange={(event) => setSearch(event.target.value)} />
           <select aria-label="Ano" value={year} onChange={(event) => setYear(event.target.value)}>{years.map((item) => <option key={item}>{item}</option>)}</select>
-          <button className="primary">Importar Excel</button>
-          <button>Exportar</button>
+          <button className="primary" disabled title="Importacao sera ativada na etapa de importacao">Importar Excel</button>
+          <button disabled title="Exportacao fora do escopo desta etapa">Exportar</button>
         </header>
-        <Hero year={year} />
+        <nav className="mobile-nav" aria-label="Navegacao principal">
+          {menu.map((item) => <button key={item} className={active === item ? "active" : ""} aria-current={active === item ? "page" : undefined} onClick={() => setActive(item)}>{item}</button>)}
+        </nav>
+        <PageHeader {...currentPage} year={year} />
         {active === "Dashboard" && <DashboardView year={Number(year)} />}
         {active === "Custos" && <CostsView year={year} />}
         {active === "Cartões" && <CardsViewConnected />}
@@ -253,21 +264,24 @@ export default function Home() {
   );
 }
 
-function Hero({ year }: { year: string }) {
-  const { totalPaid, invested, market } = dividendTotals();
-  return (
-    <section className="overview">
-      <div><p className="eyebrow">Controle financeiro pessoal</p><h1>Custo Mensal {year}</h1><span>Dados históricos preservados da planilha, com custos separados de aportes e investimentos.</span></div>
-      <Kpi title="Patrimônio FII atual" value={fmt(market)} tone="blue" />
-      <Kpi title="Dividendos 2026" value={fmt(totalPaid)} tone="green" />
-      <Kpi title="Yield on cost" value={pct(totalPaid / invested)} tone="amber" />
-      <Kpi title="Meta mensal" value={`${fmt(totalPaid / 6)} / ${fmt(300)}`} tone="violet" />
-    </section>
-  );
-}
-
 function Kpi({ title, value, tone = "neutral" }: { title: string; value: string; tone?: string }) {
   return <article className={`kpi ${tone}`}><span>{title}</span><strong>{value}</strong></article>;
+}
+
+function PageHeader({ eyebrow, title, text, year }: { eyebrow: string; title: string; text: string; year: string }) {
+  return <section className="page-header"><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><span>{text}</span></div><Badge>{year}</Badge></section>;
+}
+
+function Badge({ children, tone = "neutral" }: { children: ReactNode; tone?: string }) {
+  return <span className={`status-badge ${tone}`}>{children}</span>;
+}
+
+function SectionBlock({ eyebrow, title, note, children }: { eyebrow: string; title: string; note?: string; children: ReactNode }) {
+  return <section className="section-block"><div className="section-head compact"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2></div>{note && <span>{note}</span>}</div>{children}</section>;
+}
+
+function EmptyState({ title, action }: { title: string; action?: string }) {
+  return <p className="empty-dashboard"><strong>{title}</strong>{action && <span>{action}</span>}</p>;
 }
 
 async function readJson(response: Response) {
@@ -338,16 +352,33 @@ function DashboardView({ year }: { year: number }) {
         <button onClick={() => void loadDashboard()}>Atualizar</button>
       </section>
       {error && <p className="error-banner">{error}</p>}
-      {!loading && !error && !dashboard.hasFinancialImpact && <p className="empty-dashboard">{dashboard.hasTransactions ? "Existem registros no periodo, mas nenhum impacto financeiro relevante para o Dashboard." : "Nenhum lancamento persistido encontrado para este periodo. Cadastre despesas na aba Custos para alimentar o Dashboard."}</p>}
-      <section className="kpi-grid"><Kpi title="Custo de vida" value={fmt(dashboard.summary.livingCostCents / 100)} /><Kpi title="Compras no cartao" value={fmt(dashboard.summary.cardPurchasesCents / 100)} tone="blue" /><Kpi title="Pendentes" value={fmt(dashboard.summary.pendingReviewCents / 100)} tone="amber" /><Kpi title="Aportes novos" value={fmt(dashboard.summary.contributionsCents / 100)} tone="green" /><Kpi title="Dividendos" value={fmt(dashboard.summary.dividendsCents / 100)} tone="violet" /></section>
-      <section className="kpi-grid"><Kpi title="Patrimonio BRL" value={fmt(investmentBrl.currentValueCents / 100)} tone="green" /><Kpi title="Patrimonio USD" value={fmtCurrency(investmentUsd.currentValueCents / 100, "USD")} tone="blue" /><Kpi title="Consolidado em BRL" value={fmt(dashboard.investments.consolidatedBrl.currentValueCents / 100)} tone="violet" /><Kpi title="Proventos USD" value={fmtCurrency(investmentUsd.dividendsCents / 100, "USD")} tone="amber" /></section>
+      {!loading && !error && !dashboard.hasFinancialImpact && <EmptyState title={dashboard.hasTransactions ? "Sem impacto financeiro relevante no periodo." : "Nenhum lancamento persistido encontrado."} action={dashboard.hasTransactions ? "Revise classificacoes pendentes para decidir o que entra no Dashboard." : "Cadastre despesas na aba Custos para alimentar a visao consolidada."} />}
+      <SectionBlock eyebrow="Resumo do mes" title="Saidas e entradas financeiras" note="Compras, aportes e proventos ficam separados.">
+        <section className="kpi-grid"><Kpi title="Custo de vida" value={fmt(dashboard.summary.livingCostCents / 100)} /><Kpi title="Compras no cartao" value={fmt(dashboard.summary.cardPurchasesCents / 100)} tone="blue" /><Kpi title="Aportes novos" value={fmt(dashboard.summary.contributionsCents / 100)} tone="green" /><Kpi title="Dividendos" value={fmt(dashboard.summary.dividendsCents / 100)} tone="violet" /></section>
+      </SectionBlock>
+      <SectionBlock eyebrow="Cartoes" title="Compras e fatura" note="A compra compoe despesa; pagamento de fatura fica em movimentacoes.">
+        <section className="kpi-grid"><Kpi title="Compras no cartao" value={fmt(dashboard.summary.cardPurchasesCents / 100)} tone="blue" /><Kpi title="Faturas pagas" value={fmt(dashboard.summary.invoicePaymentsCents / 100)} /><Kpi title="Cashback real" value={fmt(dashboard.summary.confirmedCashbackCents / 100)} tone="green" /><Kpi title="Cashback estimado" value={fmt(dashboard.summary.estimatedCashbackCents / 100)} tone="amber" /></section>
+      </SectionBlock>
+      <SectionBlock eyebrow="Investimentos" title="Patrimonio por moeda" note="USD permanece separado e so entra no consolidado quando existe cambio.">
+        <section className="kpi-grid"><Kpi title="Patrimonio BRL" value={fmt(investmentBrl.currentValueCents / 100)} tone="green" /><Kpi title="Patrimonio USD" value={fmtCurrency(investmentUsd.currentValueCents / 100, "USD")} tone="blue" /><Kpi title="Consolidado em BRL" value={fmt(dashboard.investments.consolidatedBrl.currentValueCents / 100)} tone="violet" /><Kpi title="Proventos USD" value={fmtCurrency(investmentUsd.dividendsCents / 100, "USD")} tone="amber" /></section>
+      </SectionBlock>
+      <SectionBlock eyebrow="Proventos" title="Dividendos, cashback e rendimentos" note="Estimativas nao aumentam patrimonio confirmado.">
+        <section className="kpi-grid"><Kpi title="Dividendos" value={fmt(dashboard.summary.dividendsCents / 100)} tone="violet" /><Kpi title="Cashback real" value={fmt(dashboard.summary.confirmedCashbackCents / 100)} tone="green" /><Kpi title="Cashback estimado" value={fmt(dashboard.summary.estimatedCashbackCents / 100)} tone="amber" /><Kpi title="Rendimentos" value={fmt(dashboard.summary.reserveEarningsCents / 100)} tone="blue" /></section>
+      </SectionBlock>
       {dashboard.investments.hasPendingConversion && <p className="empty-state">Consolidado em BRL parcial: existem valores em moeda original sem conversao disponivel.</p>}
       {dashboard.investments.alerts.length > 0 && <p className="error-banner">{dashboard.investments.alerts.map((alert) => alert.message).join(" ")}</p>}
+      <SectionBlock eyebrow="Evolucao" title="Meses e categorias" note="Leitura operacional para acompanhar tendencia e concentracao.">
       <section className="split wide-left">
         <article className="panel"><div className="chart-head"><h3>Evolucao mensal persistida</h3><strong>{loading ? "Carregando..." : `${dashboard.countableTransactionCount} relevantes`}</strong></div><div className="month-bars labeled dashboard-bars">{dashboard.monthlySeries.length ? dashboard.monthlySeries.map((item) => <div key={item.month}><i style={{ height: `${Math.max(6, (item.livingCostCents / maxMonth) * 100)}%` }} /><span>{item.month.slice(5)}</span><b>{fmt(item.livingCostCents / 100)}</b></div>) : <p className="empty-state">Sem dados para grafico.</p>}</div></article>
         <article className="panel"><div className="chart-head"><h3>Por categoria</h3><strong>{fmt(dashboard.summary.livingCostCents / 100)}</strong></div><div className="simple-bars">{dashboard.categories.length ? dashboard.categories.map((item) => <div key={item.category}><span>{item.category}</span><i style={{ width: `${Math.max(4, (item.amountCents / Math.max(1, dashboard.summary.livingCostCents)) * 100)}%` }} /><b>{fmt(item.amountCents / 100)}</b></div>) : <p className="empty-state">Sem despesas confirmadas.</p>}</div></article>
       </section>
-      <section className="kpi-grid"><Kpi title="Faturas pagas" value={fmt(dashboard.summary.invoicePaymentsCents / 100)} /><Kpi title="Transferencias internas" value={fmt(dashboard.summary.internalTransfersCents / 100)} /><Kpi title="Reservas e caixinhas" value={fmt(dashboard.summary.reserveTransfersCents / 100)} /><Kpi title="Reinvestimentos" value={fmt(dashboard.summary.reinvestmentsCents / 100)} /><Kpi title="Cashback real" value={fmt(dashboard.summary.confirmedCashbackCents / 100)} tone="green" /><Kpi title="Cashback estimado" value={fmt(dashboard.summary.estimatedCashbackCents / 100)} tone="amber" /><Kpi title="Rendimentos" value={fmt(dashboard.summary.reserveEarningsCents / 100)} tone="blue" /><Kpi title="Ignorados" value={fmt(dashboard.summary.ignoredCents / 100)} /></section>
+      </SectionBlock>
+      <SectionBlock eyebrow="Movimentacoes" title="Nao duplicar custo de vida" note="Fatura paga e transferencia interna sao movimentacoes, nao novas despesas.">
+        <section className="kpi-grid"><Kpi title="Faturas pagas" value={fmt(dashboard.summary.invoicePaymentsCents / 100)} /><Kpi title="Transferencias internas" value={fmt(dashboard.summary.internalTransfersCents / 100)} /><Kpi title="Reservas e caixinhas" value={fmt(dashboard.summary.reserveTransfersCents / 100)} /><Kpi title="Reinvestimentos" value={fmt(dashboard.summary.reinvestmentsCents / 100)} /></section>
+      </SectionBlock>
+      <SectionBlock eyebrow="Pendencias" title="Itens para revisao" note="Valores pendentes ou rejeitados nao devem entrar como confirmados.">
+        <section className="kpi-grid"><Kpi title="Pendentes" value={fmt(dashboard.summary.pendingReviewCents / 100)} tone="amber" /><Kpi title="Ignorados" value={fmt(dashboard.summary.ignoredCents / 100)} /><Kpi title="Rejeitados" value={fmt(dashboard.summary.rejectedCents / 100)} /></section>
+      </SectionBlock>
     </>
   );
 }
@@ -386,10 +417,12 @@ function CostsView({ year }: { year: string }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (clearNotice = true) => {
     setLoading(true);
     setError(null);
+    if (clearNotice) setNotice(null);
     try {
       const params = `year=${year}&month=${month}`;
       const [basesResponse, expensesResponse, summaryResponse] = await Promise.all([
@@ -426,6 +459,7 @@ function CostsView({ year }: { year: string }) {
     event.preventDefault();
     setSaving(true);
     setError(null);
+    setNotice(null);
     try {
       const response = await fetch(`${localApiBaseUrl}/api/costs/expenses${editingId ? `/${editingId}` : ""}`, {
         method: editingId ? "PUT" : "POST",
@@ -435,7 +469,8 @@ function CostsView({ year }: { year: string }) {
       await readJson(response);
       setEditingId(null);
       setForm(emptyExpenseForm(year, month));
-      await loadData();
+      setNotice(editingId ? "Despesa atualizada com sucesso." : "Despesa cadastrada com sucesso.");
+      await loadData(false);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Nao foi possivel salvar a despesa.");
     } finally {
@@ -449,9 +484,11 @@ function CostsView({ year }: { year: string }) {
     }
     setSaving(true);
     setError(null);
+    setNotice(null);
     try {
       await readJson(await fetch(`${localApiBaseUrl}/api/costs/expenses/${id}/cancel`, { method: "POST" }));
-      await loadData();
+      setNotice("Despesa cancelada com sucesso.");
+      await loadData(false);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Nao foi possivel cancelar a despesa.");
     } finally {
@@ -486,6 +523,7 @@ function CostsView({ year }: { year: string }) {
         <button onClick={() => void loadData()}>Atualizar</button>
       </section>
       {error && <p className="error-banner">{error}</p>}
+      {notice && <p className="success-banner">{notice}</p>}
       <section className="kpi-grid"><Kpi title="Despesas confirmadas" value={fmt(summary.totalConfirmedCents / 100)} /><Kpi title="No cartao" value={fmt(summary.totalCardCents / 100)} tone="blue" /><Kpi title="Pendentes" value={fmt(summary.totalPendingCents / 100)} tone="amber" /><Kpi title="Lancamentos" value={String(summary.count)} tone="green" /></section>
       <section className="split wide-left">
         <article className="panel">
@@ -597,10 +635,10 @@ function CardsViewConnected() {
         <button onClick={() => void loadCards()}>Atualizar</button>
       </section>
       {error && <p className="error-banner">{error}</p>}
-      {!loading && !error && !overview.hasPurchases && <p className="empty-dashboard">Nenhuma compra de cartao persistida neste periodo. BTG e Mercado Pago continuam listados com totais zerados.</p>}
+      {!loading && !error && !overview.hasPurchases && <EmptyState title="Nenhuma compra de cartao persistida neste periodo." action="Cadastre compras em Custos usando meio Cartao; BTG e Mercado Pago permanecem listados." />}
       <section className="kpi-grid"><Kpi title="Fatura estimada" value={fmt(overview.summary.invoiceCents / 100)} /><Kpi title="Compras" value={fmt(overview.summary.purchaseCents / 100)} tone="blue" /><Kpi title="Faturas pagas" value={fmt(overview.summary.paymentCents / 100)} /><Kpi title="Cashback real" value={fmt(overview.summary.confirmedCashbackCents / 100)} tone="green" /><Kpi title="Cashback estimado" value={fmt(overview.summary.estimatedCashbackCents / 100)} tone="amber" /></section>
       <section className="split">
-        <article className="panel"><div className="chart-head"><h3>Cartoes</h3><strong>{loading ? "Carregando..." : `${overview.cards.length} cartoes`}</strong></div><div className="simple-bars">{overview.cards.map((card) => <div key={card.id}><span>{card.name}{card.status === "HISTORICO" ? " (historico)" : ""}</span><i style={{ width: `${Math.max(4, (card.invoiceCents / Math.max(1, overview.summary.invoiceCents)) * 100)}%` }} /><b>{fmt(card.invoiceCents / 100)} · cashback {fmt(card.estimatedCashbackCents / 100)}</b></div>)}</div></article>
+        <article className="panel"><div className="chart-head"><h3>Cartoes</h3><strong>{loading ? "Carregando..." : `${overview.cards.length} cartoes`}</strong></div><div className="simple-bars">{overview.cards.map((card) => <div key={card.id}><span>{card.name}{card.status === "HISTORICO" && <Badge tone="historico">Historico</Badge>}</span><i style={{ width: `${Math.max(4, (card.invoiceCents / Math.max(1, overview.summary.invoiceCents)) * 100)}%` }} /><b>{fmt(card.invoiceCents / 100)} · cashback {fmt(card.estimatedCashbackCents / 100)}</b></div>)}</div></article>
         <article className="panel"><div className="chart-head"><h3>Evolucao mensal</h3><strong>{fmt(overview.summary.invoiceCents / 100)}</strong></div><div className="month-bars labeled dashboard-bars">{overview.monthlyHistory.length ? overview.monthlyHistory.map((item) => <div key={item.month}><i style={{ height: `${Math.max(6, (item.invoiceCents / maxMonth) * 100)}%` }} /><span>{item.month.slice(5)}</span><b>{fmt(item.invoiceCents / 100)}</b></div>) : <p className="empty-state">Sem dados para grafico.</p>}</div></article>
       </section>
       <DataTable headers={["Fatura", "Data", "Cartao", "Descricao", "Parcela", "Valor"]} rows={overview.purchases.map((purchase) => [purchase.statementMonth, fmtDate(purchase.date), purchase.cardName, purchase.description, purchase.installmentNumber ? `${purchase.installmentNumber}/${purchase.totalInstallments}` : "1/1", fmt(purchase.amountCents / 100)])} />
@@ -629,6 +667,7 @@ function CardsView() {
 
 function InvestmentsConnectedView({ year }: { year: string }) {
   const [month, setMonth] = useState<string>("all");
+  const [activeTab, setActiveTab] = useState("Carteira");
   const [bases, setBases] = useState<InvestmentBases>({ assets: [] });
   const [overview, setOverview] = useState<InvestmentOverview>(emptyInvestmentOverview());
   const [operationForm, setOperationForm] = useState<InvestmentOperationForm>(() => emptyInvestmentOperationForm(year));
@@ -637,15 +676,17 @@ function InvestmentsConnectedView({ year }: { year: string }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const overviewBrl = totalForCurrency(overview, "BRL");
   const overviewUsd = totalForCurrency(overview, "USD");
   const selectedPriceAsset = bases.assets.find((asset) => asset.id === priceForm.assetId);
   const selectedOperationAsset = bases.assets.find((asset) => asset.id === operationForm.assetId);
   const operationCurrency = operationForm.assetMode === "novo" ? operationForm.currency : (selectedOperationAsset?.currency as "BRL" | "USD" | undefined) ?? "BRL";
 
-  const loadInvestments = useCallback(async () => {
+  const loadInvestments = useCallback(async (clearNotice = true) => {
     setLoading(true);
     setError(null);
+    if (clearNotice) setNotice(null);
     try {
       const [basesResponse, overviewResponse] = await Promise.all([
         fetch(`${localApiBaseUrl}/api/investments/bases`),
@@ -674,6 +715,7 @@ function InvestmentsConnectedView({ year }: { year: string }) {
     event.preventDefault();
     setSaving(true);
     setError(null);
+    setNotice(null);
     try {
       const payload = {
         assetId: operationForm.assetMode === "existente" ? operationForm.assetId : null,
@@ -697,7 +739,8 @@ function InvestmentsConnectedView({ year }: { year: string }) {
       };
       await readJson(await fetch(`${localApiBaseUrl}/api/investments/operations`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) }));
       setOperationForm(emptyInvestmentOperationForm(year));
-      await loadInvestments();
+      setNotice("Operacao registrada com sucesso.");
+      await loadInvestments(false);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Nao foi possivel salvar operacao.");
     } finally {
@@ -709,10 +752,12 @@ function InvestmentsConnectedView({ year }: { year: string }) {
     event.preventDefault();
     setSaving(true);
     setError(null);
+    setNotice(null);
     try {
       await readJson(await fetch(`${localApiBaseUrl}/api/investments/prices`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...priceForm, quotedAt: new Date(priceForm.quotedAt).toISOString(), provider: "manual" }) }));
       setPriceForm(emptyInvestmentPriceForm());
-      await loadInvestments();
+      setNotice("Preco manual salvo com sucesso.");
+      await loadInvestments(false);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Nao foi possivel salvar preco.");
     } finally {
@@ -724,10 +769,12 @@ function InvestmentsConnectedView({ year }: { year: string }) {
     event.preventDefault();
     setSaving(true);
     setError(null);
+    setNotice(null);
     try {
       await readJson(await fetch(`${localApiBaseUrl}/api/investments/exchange-rates`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ baseCurrency: "USD", quoteCurrency: "BRL", rate: exchangeForm.rate, referenceDate: exchangeForm.referenceDate, provider: "manual" }) }));
       setExchangeForm(emptyInvestmentExchangeForm());
-      await loadInvestments();
+      setNotice("Cambio USD/BRL salvo com sucesso.");
+      await loadInvestments(false);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Nao foi possivel salvar cambio.");
     } finally {
@@ -746,7 +793,11 @@ function InvestmentsConnectedView({ year }: { year: string }) {
         <button onClick={() => void loadInvestments()}>Atualizar</button>
       </section>
       {error && <p className="error-banner">{error}</p>}
-      {!loading && !error && !overview.hasAssets && <p className="empty-dashboard">Nenhum ativo persistido encontrado. Cadastre ou importe ativos em etapa futura para alimentar esta visao.</p>}
+      {notice && <p className="success-banner">{notice}</p>}
+      <div className="tabs" role="tablist" aria-label="Abas de Ativos e Proventos">
+        {["Carteira", "Operacoes", "Cotacoes", "Cambio", "Proventos"].map((tab) => <button key={tab} role="tab" aria-selected={activeTab === tab} aria-controls={`ativos-panel-${tab.toLowerCase()}`} className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>{tab}</button>)}
+      </div>
+      {!loading && !error && !overview.hasAssets && <EmptyState title="Nenhum ativo persistido encontrado." action="Abra a aba Operacoes e cadastre uma compra manual." />}
       {overview.alerts.length > 0 && <p className="error-banner">{overview.alerts.map((alert) => alert.message).join(" ")}</p>}
       <section className="kpi-grid">
         <Kpi title="Valor atual BRL" value={fmt(overviewBrl.currentValueCents / 100)} tone="green" />
@@ -756,7 +807,7 @@ function InvestmentsConnectedView({ year }: { year: string }) {
         <Kpi title="Proventos USD" value={fmtCurrency(overviewUsd.dividendsCents / 100, "USD")} tone="amber" />
       </section>
       {overview.hasPendingConversion && <p className="empty-state">Consolidado BRL parcial: existem valores em moeda original sem conversao disponivel.</p>}
-      <section className="split wide-left">
+      {activeTab === "Operacoes" && <section className="split wide-left" role="tabpanel" id="ativos-panel-operacoes">
         <article className="panel">
           <div className="chart-head"><h3>Operacao manual</h3><strong>Compra ou venda</strong></div>
           <form className="expense-form" onSubmit={(event) => void submitOperation(event)}>
@@ -781,7 +832,9 @@ function InvestmentsConnectedView({ year }: { year: string }) {
             <button className="primary" disabled={saving}>{saving ? "Salvando..." : "Cadastrar operacao"}</button>
           </form>
         </article>
-        <article className="panel">
+      </section>}
+      {(activeTab === "Cotacoes" || activeTab === "Cambio") && <section className="single-panel" role="tabpanel" id={`ativos-panel-${activeTab.toLowerCase()}`}>
+        {activeTab === "Cotacoes" && <article className="panel">
           <div className="chart-head"><h3>Dados de mercado</h3><strong>Preco e cambio</strong></div>
           <form className="expense-form" onSubmit={(event) => void submitPrice(event)}>
             <label>Ativo<select value={priceForm.assetId} onChange={(event) => {
@@ -793,19 +846,24 @@ function InvestmentsConnectedView({ year }: { year: string }) {
             <label>Data/hora<input type="datetime-local" value={priceForm.quotedAt} onChange={(event) => setPriceForm({ ...priceForm, quotedAt: event.target.value })} required /></label>
             <button className="primary" disabled={saving || bases.assets.length === 0}>{saving ? "Salvando..." : "Salvar preco manual"}</button>
           </form>
+        </article>}
+        {activeTab === "Cambio" && <article className="panel">
+          <div className="chart-head"><h3>Cambio manual</h3><strong>USD/BRL</strong></div>
           <form className="expense-form" onSubmit={(event) => void submitExchange(event)}>
             <label>Par<input value="USD/BRL" readOnly /></label>
             <label>Taxa<span className="money-input"><b>R$</b><input inputMode="decimal" value={exchangeForm.rate} onChange={(event) => setExchangeForm({ ...exchangeForm, rate: event.target.value })} placeholder="5,40" required /></span></label>
             <label>Referencia<input type="date" value={exchangeForm.referenceDate} onChange={(event) => setExchangeForm({ ...exchangeForm, referenceDate: event.target.value })} required /></label>
             <button className="primary" disabled={saving}>{saving ? "Salvando..." : "Salvar cambio USD/BRL"}</button>
           </form>
-        </article>
-      </section>
-      <section className="split wide-left">
-        <DataTable headers={["Ticker", "Classe", "Moeda", "Qtd", "Preco medio", "Preco atual", "Valor atual", "Proventos"]} rows={overview.positions.map((asset) => [asset.ticker ?? asset.name, asset.assetClass, asset.currency, asset.quantityDecimal, asset.averagePriceDecimal ? fmtCurrency(Number(asset.averagePriceDecimal), asset.currency) : "-", asset.lastPriceDecimal ? fmtCurrency(Number(asset.lastPriceDecimal), asset.currency) : "-", asset.currentValueCents === null ? "Preco pendente" : fmtCurrency(asset.currentValueCents / 100, asset.currency), fmtCurrency(dividendTotalForPosition(overview, asset.assetId, asset.currency) / 100, asset.currency)])} />
-        <DataTable headers={["Data", "Ativo", "Moeda", "Valor", "Valor BRL"]} rows={overview.dividends.map((dividend) => [fmtDate(dividend.paymentDate), dividend.ticker ?? dividend.name ?? dividend.description, dividend.currency, fmtCurrency(dividend.amountCents / 100, dividend.currency), dividend.amountBrlCents === null ? "Cambio pendente" : fmt(dividend.amountBrlCents / 100)])} />
-      </section>
-      <p className="empty-state">{overview.exchangeRate.rateDecimal ? `USD/BRL ${overview.exchangeRate.rateDecimal} em ${fmtDate(overview.exchangeRate.referenceDate ?? "")} (${overview.exchangeRate.provider})` : "Cotacao USD/BRL nao cadastrada."}</p>
+          <p className="empty-state">{overview.exchangeRate.rateDecimal ? `USD/BRL ${overview.exchangeRate.rateDecimal} em ${fmtDate(overview.exchangeRate.referenceDate ?? "")} (${overview.exchangeRate.provider})` : "Cotacao USD/BRL nao cadastrada."}</p>
+        </article>}
+      </section>}
+      {activeTab === "Carteira" && <section className="split wide-left" role="tabpanel" id="ativos-panel-carteira">
+        {overview.positions.length ? <DataTable headers={["Ticker", "Classe", "Moeda", "Qtd", "Preco medio", "Preco atual", "Valor atual", "Proventos"]} rows={overview.positions.map((asset) => [asset.ticker ?? asset.name, asset.assetClass, asset.currency, asset.quantityDecimal, asset.averagePriceDecimal ? fmtCurrency(Number(asset.averagePriceDecimal), asset.currency) : "-", asset.lastPriceDecimal ? fmtCurrency(Number(asset.lastPriceDecimal), asset.currency) : "-", asset.currentValueCents === null ? "Preco pendente" : fmtCurrency(asset.currentValueCents / 100, asset.currency), fmtCurrency(dividendTotalForPosition(overview, asset.assetId, asset.currency) / 100, asset.currency)])} /> : <EmptyState title="Carteira sem posicoes confirmadas." action="Use Operacoes para cadastrar uma compra manual." />}
+      </section>}
+      {activeTab === "Proventos" && <section className="split wide-left" role="tabpanel" id="ativos-panel-proventos">
+        {overview.dividends.length ? <DataTable headers={["Data", "Ativo", "Moeda", "Valor", "Valor BRL"]} rows={overview.dividends.map((dividend) => [fmtDate(dividend.paymentDate), dividend.ticker ?? dividend.name ?? dividend.description, dividend.currency, fmtCurrency(dividend.amountCents / 100, dividend.currency), dividend.amountBrlCents === null ? "Cambio pendente" : fmt(dividend.amountBrlCents / 100)])} /> : <EmptyState title="Nenhum provento registrado." action="Dividendos confirmados aparecerao aqui quando existirem eventos financeiros." />}
+      </section>}
     </>
   );
 }

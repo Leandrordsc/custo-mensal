@@ -97,18 +97,26 @@ test("server-renders a aplicacao financeira atual", async () => {
 
   const html = await response.text();
   assert.match(html, /Controle de Custos/);
-  assert.match(html, /Custo Mensal[\s\S]*2026/);
+  assert.match(html, /Controle financeiro pessoal/);
   assert.match(html, /Dashboard/);
   assert.match(html, /Ativos e Proventos/);
-  assert.match(html, /Dividendos 2026/);
+  assert.match(html, /Navegacao principal/);
+  assert.match(html, /Resumo do mes/);
   assert.doesNotMatch(html, /Your site is taking shape|Building your site/);
 });
 
 test("codigo renderizado contem controles de cadastro manual de ativos", () => {
   const source = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
 
+  assert.match(source, /Abas de Ativos e Proventos/);
+  assert.match(source, /role="tablist"/);
+  assert.match(source, /aria-selected/);
+  assert.match(source, /Carteira/);
   assert.match(source, /Operacao manual/);
   assert.match(source, /Cadastrar operacao/);
   assert.match(source, /Salvar preco manual/);
   assert.match(source, /Salvar cambio USD\/BRL/);
+  assert.match(source, /Operacao registrada com sucesso/);
+  assert.match(source, /Nenhum provento registrado/);
+  assert.match(source, /Historico/);
 });
