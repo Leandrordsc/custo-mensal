@@ -114,7 +114,9 @@ test("codigo renderizado contem controles de cadastro manual de ativos", () => {
   assert.match(source, /role="tablist"/);
   assert.match(source, /aria-selected/);
   assert.match(source, /Carteira/);
-  assert.match(source, /Operacao manual/);
+  assert.match(source, /Compra \/ Venda/);
+  assert.match(source, /Tipo de ativo/);
+  assert.match(source, /Selecionar o ativo/);
   assert.match(source, /Cadastrar operacao/);
   assert.match(source, /Salvar preco manual/);
   assert.match(source, /Salvar cambio USD\/BRL/);
