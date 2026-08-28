@@ -197,7 +197,17 @@ const emptyExpenseForm = (year: string, month: number): ExpenseFormState => ({
   installments: 1,
 });
 
-const emptyInvestmentOperationForm = (year: string): InvestmentOperationForm => ({
+function localDateParts() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return { date: `${year}-${month}-${day}`, competenceMonth: `${year}-${month}` };
+}
+
+const emptyInvestmentOperationForm = (): InvestmentOperationForm => {
+  const today = localDateParts();
+  return ({
   assetMode: "existente",
   assetId: "",
   operationType: "COMPRA",
@@ -211,10 +221,11 @@ const emptyInvestmentOperationForm = (year: string): InvestmentOperationForm => 
   quantity: "",
   unitPrice: "",
   otherCosts: "",
-  date: `${year}-01-01`,
-  competenceMonth: `${year}-01`,
+  date: today.date,
+  competenceMonth: today.competenceMonth,
   notes: "",
-});
+  });
+};
 
 const emptyInvestmentPriceForm = (): InvestmentPriceForm => ({
   assetId: "",
@@ -692,7 +703,7 @@ function InvestmentsConnectedView({ year }: { year: string }) {
   const [activeTab, setActiveTab] = useState("Carteira");
   const [bases, setBases] = useState<InvestmentBases>({ assets: [] });
   const [overview, setOverview] = useState<InvestmentOverview>(emptyInvestmentOverview());
-  const [operationForm, setOperationForm] = useState<InvestmentOperationForm>(() => emptyInvestmentOperationForm(year));
+  const [operationForm, setOperationForm] = useState<InvestmentOperationForm>(() => emptyInvestmentOperationForm());
   const [priceForm, setPriceForm] = useState<InvestmentPriceForm>(() => emptyInvestmentPriceForm());
   const [exchangeForm, setExchangeForm] = useState<InvestmentExchangeForm>(() => emptyInvestmentExchangeForm());
   const [loading, setLoading] = useState(true);
@@ -779,7 +790,7 @@ function InvestmentsConnectedView({ year }: { year: string }) {
         notes: operationForm.notes,
       };
       await readJson(await fetch(`${localApiBaseUrl}/api/investments/operations`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) }));
-      setOperationForm(emptyInvestmentOperationForm(year));
+      setOperationForm(emptyInvestmentOperationForm());
       setNotice("Operacao registrada com sucesso.");
       await loadInvestments(false);
     } catch (nextError) {
@@ -869,7 +880,7 @@ function InvestmentsConnectedView({ year }: { year: string }) {
             <label>Preco unitario<span className="money-input"><b>{operationCurrency === "USD" ? "US$" : "R$"}</b><input inputMode="decimal" value={operationForm.unitPrice} onChange={(event) => setOperationForm({ ...operationForm, unitPrice: event.target.value })} placeholder="100,00" required /></span></label>
             {operationForm.operationType === "COMPRA" && <label>Outros custos<small>Corretagem, taxas ou impostos da compra.</small><span className="money-input"><b>{operationCurrency === "USD" ? "US$" : "R$"}</b><input inputMode="decimal" value={operationForm.otherCosts} onChange={(event) => setOperationForm({ ...operationForm, otherCosts: event.target.value })} placeholder="0,00" /></span></label>}
             <label>Data<input type="date" value={operationForm.date} onChange={(event) => setOperationForm({ ...operationForm, date: event.target.value })} required /></label>
-            <label>Competencia<input value={operationForm.competenceMonth} onChange={(event) => setOperationForm({ ...operationForm, competenceMonth: event.target.value })} placeholder="2026-08" required /></label>
+            <label>Competencia<input type="month" value={operationForm.competenceMonth} onChange={(event) => setOperationForm({ ...operationForm, competenceMonth: event.target.value })} required /></label>
             <label>Observacao<input value={operationForm.notes} onChange={(event) => setOperationForm({ ...operationForm, notes: event.target.value })} placeholder="opcional" /></label>
             <button className="primary" disabled={saving}>{saving ? "Salvando..." : "Cadastrar operacao"}</button>
           </form>

@@ -118,6 +118,9 @@ test("codigo renderizado contem controles de cadastro manual de ativos", () => {
   assert.match(source, /Tipo de ativo/);
   assert.match(source, /Selecionar o ativo/);
   assert.match(source, /Outros custos/);
+  assert.match(source, /localDateParts/);
+  assert.match(source, /type="month" value=\{operationForm\.competenceMonth\}/);
+  assert.doesNotMatch(source, /date: `\\$\\{year\\}-01-01`/);
   assert.doesNotMatch(source, /Cambio usado/);
   assert.match(source, /Cadastrar operacao/);
   assert.match(source, /Salvar preco manual/);
