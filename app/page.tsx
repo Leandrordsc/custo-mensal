@@ -128,10 +128,9 @@ type InvestmentOperationForm = {
   currency: "BRL" | "USD";
   quantity: string;
   unitPrice: string;
-  totalAmount: string;
+  otherCosts: string;
   date: string;
   competenceMonth: string;
-  exchangeRate: string;
   notes: string;
 };
 type InvestmentPriceForm = { assetId: string; price: string; currency: "BRL" | "USD"; quotedAt: string };
@@ -211,10 +210,9 @@ const emptyInvestmentOperationForm = (year: string): InvestmentOperationForm => 
   currency: "BRL",
   quantity: "",
   unitPrice: "",
-  totalAmount: "",
+  otherCosts: "",
   date: `${year}-01-01`,
   competenceMonth: `${year}-01`,
-  exchangeRate: "",
   notes: "",
 });
 
@@ -327,6 +325,10 @@ function parseDecimalInput(value: string) {
   const normalized = value.replace(/\./g, "").replace(",", ".").trim();
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function isValidOptionalMoney(value: string) {
+  return value.trim() === "" || parseDecimalInput(value) >= 0;
 }
 
 function decimalToInput(value: number) {
@@ -751,7 +753,11 @@ function InvestmentsConnectedView({ year }: { year: string }) {
     setError(null);
     setNotice(null);
     try {
-      const totalAmount = decimalToInput(parseDecimalInput(operationForm.quantity) * parseDecimalInput(operationForm.unitPrice));
+      const grossAmount = parseDecimalInput(operationForm.quantity) * parseDecimalInput(operationForm.unitPrice);
+      if (!isValidOptionalMoney(operationForm.otherCosts)) {
+        throw new Error("Outros custos deve ser zero ou positivo.");
+      }
+      const totalAmount = decimalToInput(grossAmount + (operationForm.operationType === "COMPRA" ? parseDecimalInput(operationForm.otherCosts) : 0));
       const operationAsset = matchingOperationAsset;
       const payload = {
         assetId: operationAsset ? operationAsset.id : null,
@@ -770,7 +776,6 @@ function InvestmentsConnectedView({ year }: { year: string }) {
         totalAmount,
         date: operationForm.date,
         competenceMonth: operationForm.competenceMonth,
-        exchangeRate: operationForm.exchangeRate,
         notes: operationForm.notes,
       };
       await readJson(await fetch(`${localApiBaseUrl}/api/investments/operations`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) }));
@@ -854,13 +859,17 @@ function InvestmentsConnectedView({ year }: { year: string }) {
           <form className="expense-form" onSubmit={(event) => void submitOperation(event)}>
             <label>Operacao<select value={operationForm.operationType} onChange={(event) => setOperationForm({ ...operationForm, operationType: event.target.value as "COMPRA" | "VENDA" })}><option value="COMPRA">Compra</option><option value="VENDA">Venda</option></select></label>
             <label>Tipo de ativo<select value={operationForm.assetClass} onChange={(event) => setOperationAssetType(event.target.value)}>{assetTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-            <label className="full-row">Selecionar o ativo<input list="operation-assets" value={operationForm.ticker} onChange={(event) => setOperationForm({ ...operationForm, ticker: event.target.value.toUpperCase(), assetMode: matchingOperationAsset ? "existente" : "novo" })} placeholder={operationForm.assetClass === "FII" ? "Digite MXR... para MXRF11" : "Digite IT... para ITUB4"} required /><datalist id="operation-assets">{filteredOperationAssets.map((asset) => <option key={asset.id} value={asset.ticker ?? asset.name}>{asset.name}</option>)}</datalist><small>{matchingOperationAsset ? `${matchingOperationAsset.name} encontrado na carteira.` : "Se nao existir, o ativo sera criado com esse ticker."}</small></label>
+            <label className="full-row">Selecionar o ativo<input list="operation-assets" value={operationForm.ticker} onChange={(event) => {
+              const ticker = event.target.value.toUpperCase();
+              const exists = bases.assets.some((asset) => asset.assetClass === operationForm.assetClass && [asset.ticker, asset.name].some((value) => value?.toUpperCase() === ticker));
+              setOperationForm({ ...operationForm, ticker, assetMode: exists ? "existente" : "novo" });
+            }} placeholder={operationForm.assetClass === "FII" ? "Digite MXR... para MXRF11" : "Digite IT... para ITUB4"} required /><datalist id="operation-assets">{filteredOperationAssets.map((asset) => <option key={asset.id} value={asset.ticker ?? asset.name}>{asset.name}</option>)}</datalist><small>{matchingOperationAsset ? `${matchingOperationAsset.name} encontrado na carteira.` : "Se nao existir, o ativo sera criado com esse ticker."}</small></label>
             {operationForm.operationType === "COMPRA" && <label>Subtipo<select value={operationForm.subtype} onChange={(event) => setOperationForm({ ...operationForm, subtype: event.target.value as "APORTE" | "REINVESTIMENTO" })}><option value="APORTE">Aporte</option><option value="REINVESTIMENTO">Reinvestimento</option></select></label>}
             <label>Quantidade<input value={operationForm.quantity} onChange={(event) => setOperationForm({ ...operationForm, quantity: event.target.value })} placeholder="10,5" required /></label>
             <label>Preco unitario<span className="money-input"><b>{operationCurrency === "USD" ? "US$" : "R$"}</b><input inputMode="decimal" value={operationForm.unitPrice} onChange={(event) => setOperationForm({ ...operationForm, unitPrice: event.target.value })} placeholder="100,00" required /></span></label>
+            {operationForm.operationType === "COMPRA" && <label>Outros custos<small>Corretagem, taxas ou impostos da compra.</small><span className="money-input"><b>{operationCurrency === "USD" ? "US$" : "R$"}</b><input inputMode="decimal" value={operationForm.otherCosts} onChange={(event) => setOperationForm({ ...operationForm, otherCosts: event.target.value })} placeholder="0,00" /></span></label>}
             <label>Data<input type="date" value={operationForm.date} onChange={(event) => setOperationForm({ ...operationForm, date: event.target.value })} required /></label>
             <label>Competencia<input value={operationForm.competenceMonth} onChange={(event) => setOperationForm({ ...operationForm, competenceMonth: event.target.value })} placeholder="2026-08" required /></label>
-            <label>Cambio usado<span className="money-input"><b>R$</b><input inputMode="decimal" value={operationForm.exchangeRate} onChange={(event) => setOperationForm({ ...operationForm, exchangeRate: event.target.value })} placeholder="opcional" /></span></label>
             <label>Observacao<input value={operationForm.notes} onChange={(event) => setOperationForm({ ...operationForm, notes: event.target.value })} placeholder="opcional" /></label>
             <button className="primary" disabled={saving}>{saving ? "Salvando..." : "Cadastrar operacao"}</button>
           </form>
