@@ -287,10 +287,6 @@ function PageHeader({ eyebrow, title, text, year }: { eyebrow: string; title: st
   return <section className="page-header"><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><span>{text}</span></div><Badge>{year}</Badge></section>;
 }
 
-function ActionHeader({ eyebrow, title, note, action }: { eyebrow: string; title: string; note: string; action?: ReactNode }) {
-  return <section className="section-head"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2><span>{note}</span></div>{action && <div className="section-actions">{action}</div>}</section>;
-}
-
 function Badge({ children, tone = "neutral" }: { children: ReactNode; tone?: string }) {
   return <span className={`status-badge ${tone}`}>{children}</span>;
 }
@@ -699,8 +695,10 @@ function CardsView() {
 }
 
 function InvestmentsConnectedView({ year }: { year: string }) {
-  const [month, setMonth] = useState<string>("all");
-  const [activeTab, setActiveTab] = useState("Carteira");
+  const [month] = useState<string>("all");
+  const [showOperationForm, setShowOperationForm] = useState(false);
+  const [showPriceForm, setShowPriceForm] = useState(false);
+  const [showExchangeForm, setShowExchangeForm] = useState(false);
   const [bases, setBases] = useState<InvestmentBases>({ assets: [] });
   const [overview, setOverview] = useState<InvestmentOverview>(emptyInvestmentOverview());
   const [operationForm, setOperationForm] = useState<InvestmentOperationForm>(() => emptyInvestmentOperationForm());
@@ -721,8 +719,28 @@ function InvestmentsConnectedView({ year }: { year: string }) {
   const operationCurrency = (matchingOperationAsset?.currency as "BRL" | "USD" | undefined) ?? operationForm.currency;
 
   function startNewAssetFlow() {
-    setActiveTab("Operacoes");
+    setShowOperationForm(true);
+    setShowPriceForm(false);
+    setShowExchangeForm(false);
     setOperationForm((current) => ({ ...current, assetMode: "novo", assetId: "", ticker: "", name: "", operationType: "COMPRA", subtype: "APORTE" }));
+  }
+
+  function toggleOperationForm() {
+    setShowOperationForm((current) => !current);
+    setShowPriceForm(false);
+    setShowExchangeForm(false);
+  }
+
+  function togglePriceForm() {
+    setShowOperationForm(false);
+    setShowPriceForm((current) => !current);
+    setShowExchangeForm(false);
+  }
+
+  function toggleExchangeForm() {
+    setShowOperationForm(false);
+    setShowPriceForm(false);
+    setShowExchangeForm((current) => !current);
   }
 
   function setOperationAssetType(assetClass: string) {
@@ -836,23 +854,13 @@ function InvestmentsConnectedView({ year }: { year: string }) {
 
   return (
     <>
-      <ActionHeader
-        eyebrow="Ativos SQLite"
-        title="Ativos e proventos multi-moeda"
-        note="Brasil em BRL, EUA em USD e consolidado em BRL por cotacao registrada."
-        action={<button className="primary inline-action" onClick={startNewAssetFlow} disabled={loading || Boolean(error)}>Incluir ativo</button>}
-      />
-      <section className="costs-toolbar">
-        <select aria-label="Periodo de Ativos" value={month} onChange={(event) => setMonth(event.target.value)}>
-          <option value="all">Ano inteiro</option>
-          {monthOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-        </select>
-        <button onClick={() => void loadInvestments()}>Atualizar</button>
-      </section>
       {error && <p className="error-banner">{error}</p>}
       {notice && <p className="success-banner">{notice}</p>}
-      <div className="tabs" role="tablist" aria-label="Abas de Ativos e Proventos">
-        {["Carteira", "Operacoes", "Cotacoes", "Cambio", "Proventos"].map((tab) => <button key={tab} role="tab" aria-selected={activeTab === tab} aria-controls={`ativos-panel-${tab.toLowerCase()}`} className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>{tab}</button>)}
+      <div className="asset-actions" aria-label="Acoes de ativos">
+        <button className={showOperationForm ? "active" : ""} aria-expanded={showOperationForm} aria-controls="asset-operation-panel" onClick={toggleOperationForm}>Compra / Venda</button>
+        <button className={showPriceForm ? "active" : ""} aria-expanded={showPriceForm} aria-controls="asset-price-panel" onClick={togglePriceForm}>Registrar preco</button>
+        <button className={showExchangeForm ? "active" : ""} aria-expanded={showExchangeForm} aria-controls="asset-exchange-panel" onClick={toggleExchangeForm}>Atualizar cambio</button>
+        <button className="refresh-action" onClick={() => void loadInvestments()}>Atualizar dados</button>
       </div>
       {!loading && !error && !overview.hasAssets && <div className="empty-dashboard actionable"><strong>Nenhum ativo persistido encontrado.</strong><span>Comece cadastrando o ativo e a primeira compra no mesmo formulario.</span><button className="primary inline-action" onClick={startNewAssetFlow}>Incluir primeiro ativo</button></div>}
       {overview.alerts.length > 0 && <p className="error-banner">{overview.alerts.map((alert) => alert.message).join(" ")}</p>}
@@ -864,7 +872,7 @@ function InvestmentsConnectedView({ year }: { year: string }) {
         <Kpi title="Proventos USD" value={fmtCurrency(overviewUsd.dividendsCents / 100, "USD")} tone="amber" />
       </section>
       {overview.hasPendingConversion && <p className="empty-state">Consolidado BRL parcial: existem valores em moeda original sem conversao disponivel.</p>}
-      {activeTab === "Operacoes" && <section className="split wide-left" role="tabpanel" id="ativos-panel-operacoes">
+      {showOperationForm && <section className="single-panel" id="asset-operation-panel">
         <article className="panel">
           <div className="chart-head"><h3>Compra / Venda</h3><strong>{matchingOperationAsset ? "Ativo existente" : "Novo ativo"}</strong></div>
           <form className="expense-form" onSubmit={(event) => void submitOperation(event)}>
@@ -886,9 +894,9 @@ function InvestmentsConnectedView({ year }: { year: string }) {
           </form>
         </article>
       </section>}
-      {(activeTab === "Cotacoes" || activeTab === "Cambio") && <section className="single-panel" role="tabpanel" id={`ativos-panel-${activeTab.toLowerCase()}`}>
-        {activeTab === "Cotacoes" && <article className="panel">
-          <div className="chart-head"><h3>Dados de mercado</h3><strong>Preco e cambio</strong></div>
+      {showPriceForm && <section className="single-panel" id="asset-price-panel">
+        <article className="panel">
+          <div className="chart-head"><h3>Registrar preco</h3><strong>Cotacao manual</strong></div>
           <form className="expense-form" onSubmit={(event) => void submitPrice(event)}>
             <label>Ativo<select value={priceForm.assetId} onChange={(event) => {
               const asset = bases.assets.find((item) => item.id === event.target.value);
@@ -899,9 +907,11 @@ function InvestmentsConnectedView({ year }: { year: string }) {
             <label>Data/hora<input type="datetime-local" value={priceForm.quotedAt} onChange={(event) => setPriceForm({ ...priceForm, quotedAt: event.target.value })} required /></label>
             <button className="primary" disabled={saving || bases.assets.length === 0}>{saving ? "Salvando..." : "Salvar preco manual"}</button>
           </form>
-        </article>}
-        {activeTab === "Cambio" && <article className="panel">
-          <div className="chart-head"><h3>Cambio manual</h3><strong>USD/BRL</strong></div>
+        </article>
+      </section>}
+      {showExchangeForm && <section className="single-panel" id="asset-exchange-panel">
+        <article className="panel">
+          <div className="chart-head"><h3>Atualizar cambio</h3><strong>USD/BRL</strong></div>
           <form className="expense-form" onSubmit={(event) => void submitExchange(event)}>
             <label>Par<input value="USD/BRL" readOnly /></label>
             <label>Taxa<span className="money-input"><b>R$</b><input inputMode="decimal" value={exchangeForm.rate} onChange={(event) => setExchangeForm({ ...exchangeForm, rate: event.target.value })} placeholder="5,40" required /></span></label>
@@ -909,14 +919,18 @@ function InvestmentsConnectedView({ year }: { year: string }) {
             <button className="primary" disabled={saving}>{saving ? "Salvando..." : "Salvar cambio USD/BRL"}</button>
           </form>
           <p className="empty-state">{overview.exchangeRate.rateDecimal ? `USD/BRL ${overview.exchangeRate.rateDecimal} em ${fmtDate(overview.exchangeRate.referenceDate ?? "")} (${overview.exchangeRate.provider})` : "Cotacao USD/BRL nao cadastrada."}</p>
-        </article>}
+        </article>
       </section>}
-      {activeTab === "Carteira" && <section className="split wide-left" role="tabpanel" id="ativos-panel-carteira">
-        {overview.positions.length ? <DataTable headers={["Ticker", "Classe", "Moeda", "Qtd", "Preco medio", "Preco atual", "Valor atual", "Proventos"]} rows={overview.positions.map((asset) => [asset.ticker ?? asset.name, asset.assetClass, asset.currency, asset.quantityDecimal, asset.averagePriceDecimal ? fmtCurrency(Number(asset.averagePriceDecimal), asset.currency) : "-", asset.lastPriceDecimal ? fmtCurrency(Number(asset.lastPriceDecimal), asset.currency) : "-", asset.currentValueCents === null ? "Preco pendente" : fmtCurrency(asset.currentValueCents / 100, asset.currency), fmtCurrency(dividendTotalForPosition(overview, asset.assetId, asset.currency) / 100, asset.currency)])} /> : <EmptyState title="Carteira sem posicoes confirmadas." action="Use Operacoes para cadastrar uma compra manual." />}
-      </section>}
-      {activeTab === "Proventos" && <section className="split wide-left" role="tabpanel" id="ativos-panel-proventos">
-        {overview.dividends.length ? <DataTable headers={["Data", "Ativo", "Moeda", "Valor", "Valor BRL"]} rows={overview.dividends.map((dividend) => [fmtDate(dividend.paymentDate), dividend.ticker ?? dividend.name ?? dividend.description, dividend.currency, fmtCurrency(dividend.amountCents / 100, dividend.currency), dividend.amountBrlCents === null ? "Cambio pendente" : fmt(dividend.amountBrlCents / 100)])} /> : <EmptyState title="Nenhum provento registrado." action="Dividendos confirmados aparecerao aqui quando existirem eventos financeiros." />}
-      </section>}
+      <section className="asset-columns">
+        <article className="panel">
+          <div className="chart-head"><h3>Carteira</h3><strong>{overview.positions.length} ativos</strong></div>
+          {overview.positions.length ? <DataTable headers={["Ticker", "Classe", "Moeda", "Qtd", "Preco medio", "Preco atual", "Valor atual", "Proventos"]} rows={overview.positions.map((asset) => [asset.ticker ?? asset.name, asset.assetClass, asset.currency, asset.quantityDecimal, asset.averagePriceDecimal ? fmtCurrency(Number(asset.averagePriceDecimal), asset.currency) : "-", asset.lastPriceDecimal ? fmtCurrency(Number(asset.lastPriceDecimal), asset.currency) : "-", asset.currentValueCents === null ? "Preco pendente" : fmtCurrency(asset.currentValueCents / 100, asset.currency), fmtCurrency(dividendTotalForPosition(overview, asset.assetId, asset.currency) / 100, asset.currency)])} /> : <EmptyState title="Carteira sem posicoes confirmadas." action="Use Compra / Venda para cadastrar uma operacao manual." />}
+        </article>
+        <article className="panel">
+          <div className="chart-head"><h3>Proventos</h3><strong>{overview.dividends.length} registros</strong></div>
+          {overview.dividends.length ? <DataTable headers={["Data", "Ativo", "Moeda", "Valor", "Valor BRL"]} rows={overview.dividends.map((dividend) => [fmtDate(dividend.paymentDate), dividend.ticker ?? dividend.name ?? dividend.description, dividend.currency, fmtCurrency(dividend.amountCents / 100, dividend.currency), dividend.amountBrlCents === null ? "Cambio pendente" : fmt(dividend.amountBrlCents / 100)])} /> : <EmptyState title="Nenhum provento registrado." action="Dividendos confirmados aparecerao aqui quando existirem eventos financeiros." />}
+        </article>
+      </section>
     </>
   );
 }

@@ -176,7 +176,7 @@ button:disabled {
   gap: 8px;
   margin: 10px 0;
 }
-.mobile-nav button, .tabs button {
+.mobile-nav button, .tabs button, .asset-actions button {
   min-height: 38px;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -185,7 +185,7 @@ button:disabled {
   padding: 8px 10px;
   font-weight: 850;
 }
-.mobile-nav button.active, .tabs button.active {
+.mobile-nav button.active, .tabs button.active, .asset-actions button.active {
   border-color: color-mix(in srgb, var(--blue) 42%, var(--border));
   background: color-mix(in srgb, var(--blue) 10%, var(--panel));
   color: var(--foreground);
@@ -576,6 +576,28 @@ h3 { font-size: 16px; }
   flex-wrap: wrap;
   gap: 8px;
   margin: 0 0 12px;
+}
+.asset-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.asset-actions .refresh-action {
+  margin-left: auto;
+  background: var(--panel-2);
+}
+.asset-columns {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+@media (min-width: 1180px) {
+  .asset-columns { grid-template-columns: minmax(0, 1.15fr) minmax(360px, .85fr); }
+}
+.asset-columns .panel {
+  min-width: 0;
 }
 .single-panel {
   margin-bottom: 12px;

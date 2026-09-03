@@ -108,12 +108,16 @@ test("server-renders a aplicacao financeira atual", async () => {
 test("codigo renderizado contem controles de cadastro manual de ativos", () => {
   const source = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
 
-  assert.match(source, /Abas de Ativos e Proventos/);
-  assert.match(source, /Incluir ativo/);
+  assert.match(source, /Acoes de ativos/);
+  assert.match(source, /asset-columns/);
   assert.match(source, /Incluir primeiro ativo/);
-  assert.match(source, /role="tablist"/);
-  assert.match(source, /aria-selected/);
+  assert.match(source, /aria-expanded/);
+  assert.match(source, /asset-operation-panel/);
+  assert.doesNotMatch(source, /Abas de Ativos e Proventos/);
+  assert.doesNotMatch(source, /role="tablist"/);
+  assert.doesNotMatch(source, /aria-selected/);
   assert.match(source, /Carteira/);
+  assert.match(source, /Proventos/);
   assert.match(source, /Compra \/ Venda/);
   assert.match(source, /Tipo de ativo/);
   assert.match(source, /Selecionar o ativo/);
