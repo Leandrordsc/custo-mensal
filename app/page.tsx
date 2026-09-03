@@ -342,6 +342,19 @@ function decimalToInput(value: number) {
   return value.toFixed(2).replace(".", ",");
 }
 
+function investmentAlertsText(alerts: InvestmentOverview["alerts"]) {
+  const missingPriceTickers = alerts
+    .filter((alert) => alert.type === "MISSING_PRICE")
+    .map((alert) => alert.ticker)
+    .filter(Boolean);
+  const otherAlerts = alerts.filter((alert) => alert.type !== "MISSING_PRICE").map((alert) => alert.message);
+  const parts = [
+    missingPriceTickers.length ? `${missingPriceTickers.length} ativo${missingPriceTickers.length > 1 ? "s" : ""} sem cotacao: ${missingPriceTickers.join(", ")}.` : null,
+    ...otherAlerts,
+  ].filter(Boolean);
+  return parts.join(" ");
+}
+
 function DashboardView({ year }: { year: number }) {
   const [month, setMonth] = useState<string>("all");
   const [dashboard, setDashboard] = useState<DashboardOverview>(emptyDashboardOverview);
@@ -863,7 +876,7 @@ function InvestmentsConnectedView({ year }: { year: string }) {
         <button className="refresh-action" onClick={() => void loadInvestments()}>Atualizar dados</button>
       </div>
       {!loading && !error && !overview.hasAssets && <div className="empty-dashboard actionable"><strong>Nenhum ativo persistido encontrado.</strong><span>Comece cadastrando o ativo e a primeira compra no mesmo formulario.</span><button className="primary inline-action" onClick={startNewAssetFlow}>Incluir primeiro ativo</button></div>}
-      {overview.alerts.length > 0 && <p className="error-banner">{overview.alerts.map((alert) => alert.message).join(" ")}</p>}
+      {overview.alerts.length > 0 && <p className="warning-banner">{investmentAlertsText(overview.alerts)}</p>}
       <section className="kpi-grid">
         <Kpi title="Valor atual BRL" value={fmt(overviewBrl.currentValueCents / 100)} tone="green" />
         <Kpi title="Valor atual USD" value={fmtCurrency(overviewUsd.currentValueCents / 100, "USD")} tone="blue" />
@@ -890,7 +903,7 @@ function InvestmentsConnectedView({ year }: { year: string }) {
             <label>Data<input type="date" value={operationForm.date} onChange={(event) => setOperationForm({ ...operationForm, date: event.target.value })} required /></label>
             <label>Competencia<input type="month" value={operationForm.competenceMonth} onChange={(event) => setOperationForm({ ...operationForm, competenceMonth: event.target.value })} required /></label>
             <label>Observacao<input value={operationForm.notes} onChange={(event) => setOperationForm({ ...operationForm, notes: event.target.value })} placeholder="opcional" /></label>
-            <button className="primary" disabled={saving}>{saving ? "Salvando..." : "Cadastrar operacao"}</button>
+            <div className="form-actions submit-row"><button className="primary" disabled={saving}>{saving ? "Salvando..." : "Cadastrar operacao"}</button></div>
           </form>
         </article>
       </section>}

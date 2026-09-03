@@ -207,6 +207,7 @@ export class InvestmentService {
     let assetId: string | null = operation.assetId;
     const transactionId = createId("tx");
     const eventId = createId("investment_event");
+    const priceId = createId("asset_price");
 
     this.transaction(() => {
       if (operation.asset) {
@@ -222,11 +223,15 @@ export class InvestmentService {
         this.assertAvailableQuantity(userId, asset.id, operation.quantityDecimal, operation.competenceMonth);
       }
       insertInvestmentOperation(this.db, userId, transactionId, eventId, asset.id, asset.currency, operation);
+      if (operation.operationType === "COMPRA") {
+        insertOperationPriceSnapshot(this.db, userId, priceId, asset.id, asset.currency, operation);
+      }
     });
 
     return {
       transactionId,
       investmentEventId: eventId,
+      assetPriceId: operation.operationType === "COMPRA" ? priceId : null,
       assetId: assetId!,
     };
   }
@@ -513,14 +518,24 @@ function insertInvestmentOperation(db: DatabaseSync, userId: string, transaction
   `).run(eventId, userId, transactionId, assetId, signedQuantity, operation.unitPriceDecimal, operation.exchangeRateDecimal, operation.totalAmountCents);
 }
 
+function insertOperationPriceSnapshot(db: DatabaseSync, userId: string, priceId: string, assetId: string, currency: string, operation: NormalizedInvestmentOperation) {
+  const fetchedAt = nowIso();
+  db.prepare(`
+    insert into asset_prices (id, user_id, asset_id, price_decimal, currency, quoted_at, provider, fetched_at, is_stale)
+    values (?, ?, ?, ?, ?, ?, 'manual_operation', ?, 0)
+  `).run(priceId, userId, assetId, operation.unitPriceDecimal, currency, `${operation.date}T00:00:00.000Z`, fetchedAt);
+}
+
 function mapPositionRow(row: PositionRow, price: PriceRow | undefined, exchangeRate: ExchangeRateRow | undefined, alerts: InvestmentAlert[]): InvestmentPosition {
   const quantity = Number(row.quantity_decimal ?? 0);
   const investedCents = Number(row.invested_cents ?? 0);
-  const currentValueCents = price ? Math.round(quantity * Number(price.price_decimal) * 100) : null;
+  const averagePriceDecimal = quantity > 0 ? formatDecimal(investedCents / 100 / quantity) : null;
+  const effectivePriceDecimal = price?.price_decimal ?? averagePriceDecimal;
+  const currentValueCents = effectivePriceDecimal ? Math.round(quantity * Number(effectivePriceDecimal) * 100) : null;
   const currentValueBrlCents = row.currency === "BRL" ? currentValueCents : row.currency === "USD" ? convertUsdToBrl(currentValueCents, exchangeRate) : null;
 
   if (!price) {
-    alerts.push({ type: "MISSING_PRICE", severity: "warning", message: `Preco ausente para ${row.ticker ?? row.name}.`, assetId: row.asset_id, ticker: row.ticker, currency: row.currency });
+    alerts.push({ type: "MISSING_PRICE", severity: "warning", message: `Cotacao ausente para ${row.ticker ?? row.name}; usando preco medio como estimativa.`, assetId: row.asset_id, ticker: row.ticker, currency: row.currency });
   } else if (price.is_stale === 1) {
     alerts.push({ type: "STALE_PRICE", severity: "warning", message: `Preco defasado para ${row.ticker ?? row.name}.`, assetId: row.asset_id, ticker: row.ticker, currency: row.currency });
   }
@@ -545,10 +560,10 @@ function mapPositionRow(row: PositionRow, price: PriceRow | undefined, exchangeR
     currency: String(row.currency),
     quantityDecimal: formatDecimal(quantity),
     investedCents,
-    averagePriceDecimal: quantity > 0 ? formatDecimal(investedCents / 100 / quantity) : null,
-    lastPriceDecimal: price?.price_decimal ?? null,
+    averagePriceDecimal,
+    lastPriceDecimal: effectivePriceDecimal,
     lastPriceQuotedAt: price?.quoted_at ?? null,
-    lastPriceIsStale: price?.is_stale === 1,
+    lastPriceIsStale: !price || price.is_stale === 1,
     currentValueCents,
     currentValueBrlCents,
   };

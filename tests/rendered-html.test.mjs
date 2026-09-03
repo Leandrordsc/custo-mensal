@@ -110,6 +110,7 @@ test("codigo renderizado contem controles de cadastro manual de ativos", () => {
 
   assert.match(source, /Acoes de ativos/);
   assert.match(source, /asset-columns/);
+  assert.match(source, /warning-banner/);
   assert.match(source, /Incluir primeiro ativo/);
   assert.match(source, /aria-expanded/);
   assert.match(source, /asset-operation-panel/);
@@ -126,6 +127,7 @@ test("codigo renderizado contem controles de cadastro manual de ativos", () => {
   assert.match(source, /type="month" value=\{operationForm\.competenceMonth\}/);
   assert.doesNotMatch(source, /date: `\\$\\{year\\}-01-01`/);
   assert.doesNotMatch(source, /Cambio usado/);
+  assert.match(source, /submit-row/);
   assert.match(source, /Cadastrar operacao/);
   assert.match(source, /Salvar preco manual/);
   assert.match(source, /Salvar cambio USD\/BRL/);

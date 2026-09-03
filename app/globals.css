@@ -508,6 +508,17 @@ h3 { font-size: 16px; }
   flex-wrap: wrap;
   gap: 8px;
 }
+.form-actions.submit-row {
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: flex-end;
+  padding-top: 8px;
+}
+.form-actions.submit-row .primary {
+  min-width: 180px;
+  min-height: 42px;
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--blue) 20%, transparent);
+}
 .form-actions button, .row-actions button {
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -521,7 +532,7 @@ h3 { font-size: 16px; }
   background: var(--blue);
   color: #fff;
 }
-.error-banner, .success-banner {
+.error-banner, .success-banner, .warning-banner {
   border: 1px solid color-mix(in srgb, var(--red) 45%, var(--border));
   border-radius: 8px;
   background: color-mix(in srgb, var(--red) 10%, var(--panel));
@@ -534,6 +545,11 @@ h3 { font-size: 16px; }
   border-color: color-mix(in srgb, var(--green) 45%, var(--border));
   background: color-mix(in srgb, var(--green) 10%, var(--panel));
   color: var(--green);
+}
+.warning-banner {
+  border-color: color-mix(in srgb, var(--amber) 48%, var(--border));
+  background: color-mix(in srgb, var(--amber) 12%, var(--panel));
+  color: var(--amber);
 }
 .empty-state {
   margin: 0;

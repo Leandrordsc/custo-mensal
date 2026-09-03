@@ -235,6 +235,9 @@ test("api investments sinaliza preco ausente, preco defasado e moeda sem convers
     assert.equal(body.alerts.some((alert) => alert.type === "MISSING_PRICE" && alert.assetId === "sem_preco"), true);
     assert.equal(body.alerts.some((alert) => alert.type === "STALE_PRICE" && alert.assetId === "preco_defasado"), true);
     assert.equal(body.alerts.some((alert) => alert.type === "UNSUPPORTED_CURRENCY" && alert.currency === "EUR"), true);
+    assert.equal(body.positions.find((position) => position.assetId === "sem_preco").lastPriceDecimal, "10");
+    assert.equal(body.positions.find((position) => position.assetId === "sem_preco").lastPriceIsStale, true);
+    assert.equal(body.positions.find((position) => position.assetId === "sem_preco").currentValueCents, 10000);
     assert.equal(body.consolidatedBrl.pendingInvestedCents, 0);
   } finally {
     cleanup();
@@ -321,7 +324,7 @@ test("api investments cadastra compra de ativo existente com transaction e inves
       subtype: "APORTE",
       quantity: "10",
       unitPrice: "10",
-      totalAmount: "100,00",
+      totalAmount: "105,00",
       date: "2026-08-10",
       competenceMonth: "2026-08",
     });
@@ -329,8 +332,12 @@ test("api investments cadastra compra de ativo existente com transaction e inves
     assert.equal(response.status, 201);
     const tx = db.prepare("select nature, subtype, classification_status, transaction_status, amount_cents, currency, direction from transactions where user_id = 'user_a'").get();
     const event = db.prepare("select quantity_decimal, unit_price_decimal, gross_amount_cents from investment_events where user_id = 'user_a'").get();
-    assert.deepEqual({ ...tx }, { nature: "INVESTIMENTO", subtype: "APORTE", classification_status: "CONFIRMADO", transaction_status: "ACTIVE", amount_cents: 10000, currency: "BRL", direction: "OUTFLOW" });
-    assert.deepEqual({ ...event }, { quantity_decimal: "10", unit_price_decimal: "10", gross_amount_cents: 10000 });
+    const price = db.prepare("select asset_id, price_decimal, currency, quoted_at, provider from asset_prices where user_id = 'user_a'").get();
+    assert.deepEqual({ ...tx }, { nature: "INVESTIMENTO", subtype: "APORTE", classification_status: "CONFIRMADO", transaction_status: "ACTIVE", amount_cents: 10500, currency: "BRL", direction: "OUTFLOW" });
+    assert.deepEqual({ ...event }, { quantity_decimal: "10", unit_price_decimal: "10", gross_amount_cents: 10500 });
+    assert.deepEqual({ ...price }, { asset_id: "mxrf11", price_decimal: "10", currency: "BRL", quoted_at: "2026-08-10T00:00:00.000Z", provider: "manual_operation" });
+    assert.equal(db.prepare("select count(*) as total from transactions where user_id = 'user_a'").get().total, 1);
+    assert.equal((await getOverview(db, context, "8")).alerts.some((alert) => alert.type === "MISSING_PRICE" && alert.assetId === "mxrf11"), false);
   } finally {
     cleanup();
   }
@@ -379,6 +386,11 @@ test("api investments cadastra novo ativo e compra na mesma transacao SQLite", a
     assert.equal(db.prepare("select count(*) as total from assets where user_id = 'user_a' and ticker = 'O'").get().total, 1);
     assert.equal(db.prepare("select subtype from transactions where user_id = 'user_a'").get().subtype, "REINVESTIMENTO");
     assert.equal(db.prepare("select exchange_rate_decimal from investment_events where user_id = 'user_a'").get().exchange_rate_decimal, "5.2");
+    assert.deepEqual(
+      { ...db.prepare("select price_decimal, currency, provider from asset_prices where user_id = 'user_a'").get() },
+      { price_decimal: "50", currency: "USD", provider: "manual_operation" },
+    );
+    assert.equal(db.prepare("select count(*) as total from transactions where user_id = 'user_a'").get().total, 1);
   } finally {
     cleanup();
   }
@@ -432,6 +444,7 @@ test("api investments cadastra venda parcial e rejeita venda maior que posicao",
     assert.equal(overview.positions[0].investedCents, 60000);
     assert.equal(overview.positions[0].averagePriceDecimal, "10");
     assert.equal(db.prepare("select count(*) as total from transactions where nature = 'DESPESA'").get().total, 0);
+    assert.equal(db.prepare("select count(*) as total from asset_prices where user_id = 'user_a'").get().total, 0);
 
     const oversell = await postInvestment(db, context, "/api/investments/operations", {
       assetId: "bbas3",
