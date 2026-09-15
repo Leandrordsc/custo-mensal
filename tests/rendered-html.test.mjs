@@ -81,13 +81,48 @@ test("usa ultimo preco conhecido quando a API de cotacao falha", async () => {
 test("gera staging de importacao com contrato esperado", () => {
   const staging = buildStaging();
 
-  assert.equal(staging.monthlyExpenses.length, 288);
+  assert.equal(staging.mode, "xlsx");
+  assert.equal(staging.parserVersion, "xlsx-detail-v1");
+  assert.match(staging.fileHash, /^[a-f0-9]{64}$/);
+  assert.ok(staging.monthlyExpenses.length > 288);
   assert.equal(staging.dividendPayments.length, 108);
-  assert.equal(staging.importIssues.length, 4);
-  assert.deepEqual(Object.keys(staging.monthlyExpenses[0]).sort(), ["amount", "classification", "month", "sourceCell", "sourceLabel", "sourceSheet", "year"].sort());
+  assert.ok(staging.importIssues.length >= 4);
+  assert.ok(staging.importIssues.some((issue) => /#REF!|#DIV\/0!|Formula|formula/i.test(issue.message)));
+  assert.deepEqual(staging.reconciliations.map((item) => item.year), [2020, 2021, 2022, 2023, 2024, 2025, 2026]);
+  assert.ok(staging.reconciliations.some((item) => item.differenceCents !== 0));
+  assert.ok(staging.reconciliations.every((item) => Number.isInteger(item.parsedCents) && (item.differenceCents === null || Number.isInteger(item.differenceCents))));
+  assert.deepEqual(
+    Object.keys(staging.monthlyExpenses[0]).sort(),
+    ["amount", "amountCents", "classification", "classificationStatus", "confidence", "issue", "logicalFingerprint", "month", "rawRowHash", "rawValue", "sourceCell", "sourceLabel", "sourceSheet", "status", "suggestedNature", "suggestedOrigin", "suggestedSubtype", "year"].sort(),
+  );
   assert.equal(staging.monthlyExpenses[0].month, 1);
-  assert.equal(staging.monthlyExpenses.at(-1).month, 12);
+  assert.ok(staging.monthlyExpenses.every((row) => Number.isInteger(row.year) && row.year >= 2020 && row.year <= 2026));
+  assert.ok(staging.monthlyExpenses.every((row) => Number.isInteger(row.month) && row.month >= 1 && row.month <= 12));
+  assert.ok(staging.monthlyExpenses.every((row) => Number.isInteger(row.amountCents) && row.amountCents > 0));
+  assert.ok(staging.monthlyExpenses.every((row) => row.sourceSheet && row.sourceCell && row.rawRowHash && row.logicalFingerprint));
+  assert.ok(staging.monthlyExpenses.every((row) => ["CONFIRMADO", "PENDENTE_REVISAO", "REJEITADO"].includes(row.classificationStatus)));
+  assert.ok(staging.monthlyExpenses.every((row) => ["ACEITO", "PENDENTE", "REJEITADO"].includes(row.status)));
+  for (const year of [2021, 2022, 2023, 2024, 2025]) {
+    assert.ok(staging.monthlyExpenses.some((row) => row.year === year && row.sourceLabel !== `Total original ${year}` && row.sourceCell && row.rawRowHash && row.logicalFingerprint));
+  }
+  assert.ok(staging.monthlyExpenses.some((row) => row.classificationStatus === "PENDENTE_REVISAO" && row.status === "PENDENTE"));
   assert.ok(staging.dividendPayments.every((payment) => payment.ticker && payment.sourceSheet === "FIIS - Dividendos"));
+
+  const repeated = buildStaging();
+  assert.equal(repeated.fileHash, staging.fileHash);
+  assert.equal(repeated.monthlyExpenses[0].rawRowHash, staging.monthlyExpenses[0].rawRowHash);
+  assert.equal(repeated.monthlyExpenses[0].logicalFingerprint, staging.monthlyExpenses[0].logicalFingerprint);
+});
+
+test("fallback de staging explicita ausencia da planilha real", () => {
+  const staging = buildStaging({ sourcePath: "referencias/arquivo-inexistente.xlsx" });
+
+  assert.equal(staging.mode, "fallback");
+  assert.equal(staging.fileHash, null);
+  assert.equal(staging.monthlyExpenses.length, 288);
+  assert.match(staging.importIssues[0].message, /Planilha nao encontrada/);
+  assert.ok(staging.monthlyExpenses.some((row) => row.sourceCell === null));
+  assert.throws(() => buildStaging({ sourcePath: "referencias/arquivo-inexistente.xlsx", allowFallback: false }), /Planilha nao encontrada/);
 });
 
 test("server-renders a aplicacao financeira atual", async () => {
