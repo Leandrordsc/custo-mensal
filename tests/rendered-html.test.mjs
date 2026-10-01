@@ -136,7 +136,7 @@ test("server-renders a aplicacao financeira atual", async () => {
   assert.match(html, /Dashboard/);
   assert.match(html, /Ativos e Proventos/);
   assert.match(html, /Navegacao principal/);
-  assert.match(html, /Resumo do mes/);
+  assert.match(html, /Resumo do ano/);
   assert.doesNotMatch(html, /Your site is taking shape|Building your site/);
 });
 
@@ -169,4 +169,19 @@ test("codigo renderizado contem controles de cadastro manual de ativos", () => {
   assert.match(source, /Operacao registrada com sucesso/);
   assert.match(source, /Nenhum provento registrado/);
   assert.match(source, /Historico/);
+});
+
+test("codigo da interface compartilha busca e ano entre as areas conectadas", () => {
+  const source = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+
+  assert.match(source, /const navigateTo = \(item: string\)/);
+  assert.match(source, /setSearch\(""\)/);
+  assert.match(source, /<CostsView year=\{year\} search=\{search\}/);
+  assert.match(source, /<CardsViewConnected year=\{year\} search=\{search\}/);
+  assert.match(source, /<InvestmentsConnectedView year=\{year\} search=\{search\}/);
+  assert.doesNotMatch(source, /aria-label="Ano de Cartoes"/);
+  assert.match(source, /aria-label="Periodo de Ativos"/);
+  assert.match(source, /requestId !== requestIdRef\.current/);
+  assert.match(source, /warning-banner" role="status"/);
+  assert.match(source, /month === "all" \? "Resumo do ano" : "Resumo do mes"/);
 });

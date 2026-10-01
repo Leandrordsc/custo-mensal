@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { allocation, annualCostSheets, cardRows, cardYield, dividends, dividendTotals, getYearSheet, hasDetailedExpenseRows, importIssues, monthlyTotals, months, sum } from "@/lib/finance-data";
 import { assertDashboardOverview, assertInvestmentOverview, dividendTotalForPosition, emptyInvestmentOverview, totalForCurrency, type DashboardOverview, type InvestmentOverview } from "@/lib/investment-view-model";
+import { matchesSearch } from "@/lib/ui-search";
 
 const menu = ["Dashboard", "Custos", "Cartões", "Ativos e Proventos"];
 const fmt = (value: number) => value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -241,9 +242,12 @@ const emptyInvestmentExchangeForm = (): InvestmentExchangeForm => ({
 
 export default function Home() {
   const [active, setActive] = useState("Dashboard");
-  const [year, setYear] = useState("2026");
+  const currentYear = new Date().getFullYear();
+  const importedYears = annualCostSheets.map((sheet) => sheet.year);
+  const initialYear = Math.max(...importedYears.filter((item) => item <= currentYear), Math.min(...importedYears));
+  const [year, setYear] = useState(String(initialYear));
   const [search, setSearch] = useState("");
-  const years = annualCostSheets.map((sheet) => String(sheet.year));
+  const years = [...new Set([...importedYears, currentYear])].sort((a, b) => a - b).map(String);
   const pageCopy: Record<string, { eyebrow: string; title: string; text: string }> = {
     Dashboard: { eyebrow: "Visao geral", title: "Controle financeiro pessoal", text: "Saidas, cartoes, investimentos, dividendos e pendencias sem dupla contagem." },
     Custos: { eyebrow: "Custos", title: "Despesas do mes", text: "Compras no cartao entram como despesa; pagamento de fatura fica separado." },
@@ -251,12 +255,17 @@ export default function Home() {
     "Ativos e Proventos": { eyebrow: "Carteira", title: "Ativos e proventos", text: "Brasil em BRL, EUA em USD e consolidado em BRL quando houver cambio." },
   };
   const currentPage = pageCopy[active] ?? pageCopy.Dashboard;
+  const navigateTo = (item: string) => {
+    if (item === active) return;
+    setSearch("");
+    setActive(item);
+  };
 
   return (
     <main className="app-shell">
       <aside className="side-menu">
         <div className="brand-lockup"><div className="brand-mark">CM</div><div><strong>Custo Mensal</strong><span>Piloto local</span></div></div>
-        {menu.map((item) => <button key={item} className={active === item ? "active" : ""} aria-current={active === item ? "page" : undefined} onClick={() => setActive(item)}>{item}</button>)}
+        {menu.map((item) => <button key={item} className={active === item ? "active" : ""} aria-current={active === item ? "page" : undefined} onClick={() => navigateTo(item)}>{item}</button>)}
       </aside>
       <section className="workbench">
         <header className="topbar">
@@ -267,13 +276,13 @@ export default function Home() {
           <button disabled title="Exportacao fora do escopo desta etapa">Exportar</button>
         </header>
         <nav className="mobile-nav" aria-label="Navegacao principal">
-          {menu.map((item) => <button key={item} className={active === item ? "active" : ""} aria-current={active === item ? "page" : undefined} onClick={() => setActive(item)}>{item}</button>)}
+          {menu.map((item) => <button key={item} className={active === item ? "active" : ""} aria-current={active === item ? "page" : undefined} onClick={() => navigateTo(item)}>{item}</button>)}
         </nav>
         <PageHeader {...currentPage} year={year} />
         {active === "Dashboard" && <DashboardView year={Number(year)} />}
-        {active === "Custos" && <CostsView year={year} />}
-        {active === "Cartões" && <CardsViewConnected />}
-        {active === "Ativos e Proventos" && <InvestmentsConnectedView year={year} />}
+        {active === "Custos" && <CostsView year={year} search={search} />}
+        {active === "Cartões" && <CardsViewConnected year={year} search={search} />}
+        {active === "Ativos e Proventos" && <InvestmentsConnectedView year={year} search={search} />}
       </section>
     </main>
   );
@@ -360,21 +369,25 @@ function DashboardView({ year }: { year: number }) {
   const [dashboard, setDashboard] = useState<DashboardOverview>(emptyDashboardOverview);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
   const maxMonth = Math.max(1, ...dashboard.monthlySeries.map((item) => Math.max(item.livingCostCents, item.cardPurchasesCents, item.pendingReviewCents)));
   const investmentBrl = totalForCurrency(dashboard.investments, "BRL");
   const investmentUsd = totalForCurrency(dashboard.investments, "USD");
 
   const loadDashboard = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
     try {
       const nextDashboard = assertDashboardOverview(await readJson(await fetch(`${localApiBaseUrl}/api/dashboard?year=${year}&month=${month}`)));
+      if (requestId !== requestIdRef.current) return;
       setDashboard(nextDashboard);
     } catch (nextError) {
+      if (requestId !== requestIdRef.current) return;
       setError(nextError instanceof Error ? nextError.message : "Nao foi possivel carregar o Dashboard local.");
       setDashboard(emptyDashboardOverview);
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
   }, [month, year]);
 
@@ -395,7 +408,7 @@ function DashboardView({ year }: { year: number }) {
       </section>
       {error && <p className="error-banner">{error}</p>}
       {!loading && !error && !dashboard.hasFinancialImpact && <EmptyState title={dashboard.hasTransactions ? "Sem impacto financeiro relevante no periodo." : "Nenhum lancamento persistido encontrado."} action={dashboard.hasTransactions ? "Revise classificacoes pendentes para decidir o que entra no Dashboard." : "Cadastre despesas na aba Custos para alimentar a visao consolidada."} />}
-      <SectionBlock eyebrow="Resumo do mes" title="Saidas e entradas financeiras" note="Compras, aportes e proventos ficam separados.">
+      <SectionBlock eyebrow={month === "all" ? "Resumo do ano" : "Resumo do mes"} title="Saidas e entradas financeiras" note="Compras, aportes e proventos ficam separados.">
         <section className="kpi-grid"><Kpi title="Custo de vida" value={fmt(dashboard.summary.livingCostCents / 100)} /><Kpi title="Compras no cartao" value={fmt(dashboard.summary.cardPurchasesCents / 100)} tone="blue" /><Kpi title="Aportes novos" value={fmt(dashboard.summary.contributionsCents / 100)} tone="green" /><Kpi title="Dividendos" value={fmt(dashboard.summary.dividendsCents / 100)} tone="violet" /></section>
       </SectionBlock>
       <SectionBlock eyebrow="Cartoes" title="Compras e fatura" note="A compra compoe despesa; pagamento de fatura fica em movimentacoes.">
@@ -408,7 +421,7 @@ function DashboardView({ year }: { year: number }) {
         <section className="kpi-grid"><Kpi title="Dividendos" value={fmt(dashboard.summary.dividendsCents / 100)} tone="violet" /><Kpi title="Cashback real" value={fmt(dashboard.summary.confirmedCashbackCents / 100)} tone="green" /><Kpi title="Cashback estimado" value={fmt(dashboard.summary.estimatedCashbackCents / 100)} tone="amber" /><Kpi title="Rendimentos" value={fmt(dashboard.summary.reserveEarningsCents / 100)} tone="blue" /></section>
       </SectionBlock>
       {dashboard.investments.hasPendingConversion && <p className="empty-state">Consolidado em BRL parcial: existem valores em moeda original sem conversao disponivel.</p>}
-      {dashboard.investments.alerts.length > 0 && <p className="error-banner">{dashboard.investments.alerts.map((alert) => alert.message).join(" ")}</p>}
+      {dashboard.investments.alerts.length > 0 && <p className="warning-banner" role="status">{dashboard.investments.alerts.map((alert) => alert.message).join(" ")}</p>}
       <SectionBlock eyebrow="Evolucao" title="Meses e categorias" note="Leitura operacional para acompanhar tendencia e concentracao.">
       <section className="split wide-left">
         <article className="panel"><div className="chart-head"><h3>Evolucao mensal persistida</h3><strong>{loading ? "Carregando..." : `${dashboard.countableTransactionCount} relevantes`}</strong></div><div className="month-bars labeled dashboard-bars">{dashboard.monthlySeries.length ? dashboard.monthlySeries.map((item) => <div key={item.month}><i style={{ height: `${Math.max(6, (item.livingCostCents / maxMonth) * 100)}%` }} /><span>{item.month.slice(5)}</span><b>{fmt(item.livingCostCents / 100)}</b></div>) : <p className="empty-state">Sem dados para grafico.</p>}</div></article>
@@ -449,7 +462,7 @@ function StaticDashboardView({ year }: { year: number }) {
   );
 }
 
-function CostsView({ year }: { year: string }) {
+function CostsView({ year, search }: { year: string; search: string }) {
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [bases, setBases] = useState<{ categories: BaseOption[]; accounts: BaseOption[]; cards: BaseOption[] }>({ categories: [], accounts: [], cards: [] });
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
@@ -460,8 +473,10 @@ function CostsView({ year }: { year: string }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
 
   const loadData = useCallback(async (clearNotice = true) => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
     if (clearNotice) setNotice(null);
@@ -473,6 +488,7 @@ function CostsView({ year }: { year: string }) {
         fetch(`${localApiBaseUrl}/api/costs/summary?${params}`),
       ]);
       const [nextBases, nextExpenses, nextSummary] = await Promise.all([readJson(basesResponse), readJson(expensesResponse), readJson(summaryResponse)]);
+      if (requestId !== requestIdRef.current) return;
       setBases(nextBases);
       setExpenses(nextExpenses);
       setSummary(nextSummary);
@@ -485,9 +501,10 @@ function CostsView({ year }: { year: string }) {
         cardId: current.cardId || nextBases.cards[0]?.id || "",
       }));
     } catch (nextError) {
+      if (requestId !== requestIdRef.current) return;
       setError(nextError instanceof Error ? nextError.message : "Nao foi possivel carregar custos.");
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
   }, [month, year]);
 
@@ -556,6 +573,16 @@ function CostsView({ year }: { year: string }) {
     });
   }
 
+  const filteredExpenses = expenses.filter((expense) => matchesSearch(search, [
+    expense.description,
+    expense.categoryName,
+    expense.accountName,
+    expense.cardName,
+    expense.paymentMethod,
+    expense.classificationStatus,
+    expense.transactionStatus,
+  ]));
+
   return (
     <>
       <section className="section-head"><div><p className="eyebrow">Custos locais</p><h2>Despesas persistidas em SQLite</h2></div><span>Compras do cartao entram como despesas; pagamento de fatura nao gera nova despesa.</span></section>
@@ -567,6 +594,7 @@ function CostsView({ year }: { year: string }) {
       {error && <p className="error-banner">{error}</p>}
       {notice && <p className="success-banner">{notice}</p>}
       <section className="kpi-grid"><Kpi title="Despesas confirmadas" value={fmt(summary.totalConfirmedCents / 100)} /><Kpi title="No cartao" value={fmt(summary.totalCardCents / 100)} tone="blue" /><Kpi title="Pendentes" value={fmt(summary.totalPendingCents / 100)} tone="amber" /><Kpi title="Lancamentos" value={String(summary.count)} tone="green" /></section>
+      {search.trim() && <p className="empty-state" role="status">A busca filtra as linhas abaixo; os totais permanecem referentes ao periodo completo.</p>}
       <section className="split wide-left">
         <article className="panel">
           <div className="chart-head"><h3>{editingId ? "Editar despesa" : "Nova despesa"}</h3><strong>{year}/{String(month).padStart(2, "0")}</strong></div>
@@ -593,7 +621,7 @@ function CostsView({ year }: { year: string }) {
       <article className="table-panel">
         <table className="data-table">
           <thead><tr>{["Data", "Descricao", "Categoria", "Meio", "Parcela", "Status", "Valor", "Acoes"].map((head) => <th key={head}>{head}</th>)}</tr></thead>
-          <tbody>{loading ? <tr><td colSpan={8}>Carregando...</td></tr> : expenses.length === 0 ? <tr><td colSpan={8}>Nenhuma despesa cadastrada no periodo. Rode o bootstrap local para criar categorias, conta e cartoes.</td></tr> : expenses.map((expense) => <tr key={expense.id} className={expense.transactionStatus !== "ACTIVE" ? "muted-row" : ""}>
+          <tbody>{loading ? <tr><td colSpan={8}>Carregando...</td></tr> : expenses.length === 0 ? <tr><td colSpan={8}>Nenhuma despesa cadastrada no periodo. Rode o bootstrap local para criar categorias, conta e cartoes.</td></tr> : filteredExpenses.length === 0 ? <tr><td colSpan={8}>Nenhuma despesa corresponde a busca.</td></tr> : filteredExpenses.map((expense) => <tr key={expense.id} className={expense.transactionStatus !== "ACTIVE" ? "muted-row" : ""}>
             <th>{fmtDate(expense.date)}<span>{expense.competenceMonth}</span></th><td>{expense.description}</td><td>{expense.categoryName ?? "-"}</td><td>{expense.paymentMethod === "CARTAO" ? expense.cardName : expense.accountName}</td><td>{expense.installmentNumber ? `${expense.installmentNumber}/${expense.totalInstallments}` : "-"}</td><td><span className={`status-badge ${expense.transactionStatus === "ACTIVE" ? expense.classificationStatus.toLowerCase() : "cancelado"}`}>{expense.transactionStatus === "ACTIVE" ? expense.classificationStatus : "CANCELADO"}</span></td><td>{fmt(expense.amountCents / 100)}</td><td className="row-actions"><button onClick={() => editExpense(expense)} disabled={expense.transactionStatus !== "ACTIVE"}>Editar</button><button onClick={() => void cancelExpense(expense.id)} disabled={expense.transactionStatus !== "ACTIVE"}>Cancelar</button></td>
           </tr>)}</tbody>
         </table>
@@ -638,25 +666,39 @@ function InvestmentsView() {
   );
 }
 
-function CardsViewConnected() {
-  const [year, setYear] = useState("2026");
+function CardsViewConnected({ year, search }: { year: string; search: string }) {
   const [month, setMonth] = useState<string>("all");
   const [overview, setOverview] = useState<CardOverview>(emptyCardOverview);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
   const maxMonth = Math.max(1, ...overview.monthlyHistory.map((item) => Math.max(item.invoiceCents, item.estimatedCashbackCents, item.confirmedCashbackCents)));
+  const cardById = new Map(overview.cards.map((card) => [card.id, card]));
+  const filteredCards = overview.cards.filter((card) => matchesSearch(search, [card.name, card.issuer, card.status]));
+  const filteredPurchases = overview.purchases.filter((purchase) => {
+    const card = cardById.get(purchase.cardId);
+    return matchesSearch(search, [purchase.cardName, card?.issuer, card?.status, purchase.description, purchase.date, purchase.statementMonth]);
+  });
+  const filteredMovements = overview.movements.filter((movement) => {
+    const card = cardById.get(movement.cardId);
+    return matchesSearch(search, [movement.cardName, card?.issuer, card?.status, movement.description, movement.date, movement.competenceMonth]);
+  });
+  const searchEmptyMessage = search.trim() ? "Nenhum registro corresponde a busca." : "Nenhum registro encontrado no periodo.";
 
   const loadCards = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
     try {
       const nextOverview = assertCardOverview(await readJson(await fetch(`${localApiBaseUrl}/api/cards/overview?year=${year}&month=${month}`)));
+      if (requestId !== requestIdRef.current) return;
       setOverview(nextOverview);
     } catch (nextError) {
+      if (requestId !== requestIdRef.current) return;
       setError(nextError instanceof Error ? nextError.message : "Nao foi possivel carregar cartoes.");
       setOverview(emptyCardOverview);
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
   }, [month, year]);
 
@@ -669,7 +711,6 @@ function CardsViewConnected() {
     <>
       <section className="section-head"><div><p className="eyebrow">Cartoes SQLite</p><h2>Fatura, compras e cashback persistidos</h2></div><span>Compras entram uma vez por parcela; pagamentos de fatura aparecem separados como movimentacao.</span></section>
       <section className="costs-toolbar">
-        <select aria-label="Ano de Cartoes" value={year} onChange={(event) => setYear(event.target.value)}>{annualCostSheets.map((sheet) => <option key={sheet.year}>{sheet.year}</option>)}</select>
         <select aria-label="Periodo de Cartoes" value={month} onChange={(event) => setMonth(event.target.value)}>
           <option value="all">Ano inteiro</option>
           {monthOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
@@ -680,12 +721,12 @@ function CardsViewConnected() {
       {!loading && !error && !overview.hasPurchases && <EmptyState title="Nenhuma compra de cartao persistida neste periodo." action="Cadastre compras em Custos usando meio Cartao; BTG e Mercado Pago permanecem listados." />}
       <section className="kpi-grid"><Kpi title="Fatura estimada" value={fmt(overview.summary.invoiceCents / 100)} /><Kpi title="Compras" value={fmt(overview.summary.purchaseCents / 100)} tone="blue" /><Kpi title="Faturas pagas" value={fmt(overview.summary.paymentCents / 100)} /><Kpi title="Cashback real" value={fmt(overview.summary.confirmedCashbackCents / 100)} tone="green" /><Kpi title="Cashback estimado" value={fmt(overview.summary.estimatedCashbackCents / 100)} tone="amber" /></section>
       <section className="split">
-        <article className="panel"><div className="chart-head"><h3>Cartoes</h3><strong>{loading ? "Carregando..." : `${overview.cards.length} cartoes`}</strong></div><div className="simple-bars">{overview.cards.map((card) => <div key={card.id}><span>{card.name}{card.status === "HISTORICO" && <Badge tone="historico">Historico</Badge>}</span><i style={{ width: `${Math.max(4, (card.invoiceCents / Math.max(1, overview.summary.invoiceCents)) * 100)}%` }} /><b>{fmt(card.invoiceCents / 100)} · cashback {fmt(card.estimatedCashbackCents / 100)}</b></div>)}</div></article>
+        <article className="panel"><div className="chart-head"><h3>Cartoes</h3><strong>{loading ? "Carregando..." : `${filteredCards.length} cartoes`}</strong></div><div className="simple-bars">{loading ? <p className="empty-state">Carregando...</p> : filteredCards.length ? filteredCards.map((card) => <div key={card.id}><span>{card.name}{card.status === "HISTORICO" && <Badge tone="historico">Historico</Badge>}</span><i style={{ width: `${Math.max(4, (card.invoiceCents / Math.max(1, overview.summary.invoiceCents)) * 100)}%` }} /><b>{fmt(card.invoiceCents / 100)} · cashback {fmt(card.estimatedCashbackCents / 100)}</b></div>) : <p className="empty-state">{searchEmptyMessage}</p>}</div></article>
         <article className="panel"><div className="chart-head"><h3>Evolucao mensal</h3><strong>{fmt(overview.summary.invoiceCents / 100)}</strong></div><div className="month-bars labeled dashboard-bars">{overview.monthlyHistory.length ? overview.monthlyHistory.map((item) => <div key={item.month}><i style={{ height: `${Math.max(6, (item.invoiceCents / maxMonth) * 100)}%` }} /><span>{item.month.slice(5)}</span><b>{fmt(item.invoiceCents / 100)}</b></div>) : <p className="empty-state">Sem dados para grafico.</p>}</div></article>
       </section>
-      <DataTable headers={["Fatura", "Data", "Cartao", "Descricao", "Parcela", "Valor"]} rows={overview.purchases.map((purchase) => [purchase.statementMonth, fmtDate(purchase.date), purchase.cardName, purchase.description, purchase.installmentNumber ? `${purchase.installmentNumber}/${purchase.totalInstallments}` : "1/1", fmt(purchase.amountCents / 100)])} />
-      <DataTable headers={["Data", "Cartao", "Movimentacao", "Competencia", "Valor"]} rows={overview.movements.map((movement) => [fmtDate(movement.date), movement.cardName, movement.description, movement.competenceMonth, fmt(movement.amountCents / 100)])} />
-      <DataTable headers={["Cartao", "Pagamento de fatura", "Cashback real", "Cashback estimado"]} rows={overview.cards.map((card) => [card.name, fmt(card.paymentCents / 100), fmt(card.confirmedCashbackCents / 100), fmt(card.estimatedCashbackCents / 100)])} />
+      <DataTable headers={["Fatura", "Data", "Cartao", "Descricao", "Parcela", "Valor"]} rows={loading ? [] : filteredPurchases.map((purchase) => [purchase.statementMonth, fmtDate(purchase.date), purchase.cardName, purchase.description, purchase.installmentNumber ? `${purchase.installmentNumber}/${purchase.totalInstallments}` : "1/1", fmt(purchase.amountCents / 100)])} emptyMessage={loading ? "Carregando..." : searchEmptyMessage} />
+      <DataTable headers={["Data", "Cartao", "Movimentacao", "Competencia", "Valor"]} rows={loading ? [] : filteredMovements.map((movement) => [fmtDate(movement.date), movement.cardName, movement.description, movement.competenceMonth, fmt(movement.amountCents / 100)])} emptyMessage={loading ? "Carregando..." : searchEmptyMessage} />
+      <DataTable headers={["Cartao", "Pagamento de fatura", "Cashback real", "Cashback estimado"]} rows={loading ? [] : filteredCards.map((card) => [card.name, fmt(card.paymentCents / 100), fmt(card.confirmedCashbackCents / 100), fmt(card.estimatedCashbackCents / 100)])} emptyMessage={loading ? "Carregando..." : searchEmptyMessage} />
     </>
   );
 }
@@ -707,8 +748,8 @@ function CardsView() {
   );
 }
 
-function InvestmentsConnectedView({ year }: { year: string }) {
-  const [month] = useState<string>("all");
+function InvestmentsConnectedView({ year, search }: { year: string; search: string }) {
+  const [month, setMonth] = useState<string>("all");
   const [showOperationForm, setShowOperationForm] = useState(false);
   const [showPriceForm, setShowPriceForm] = useState(false);
   const [showExchangeForm, setShowExchangeForm] = useState(false);
@@ -721,8 +762,12 @@ function InvestmentsConnectedView({ year }: { year: string }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
   const overviewBrl = totalForCurrency(overview, "BRL");
   const overviewUsd = totalForCurrency(overview, "USD");
+  const filteredPositions = overview.positions.filter((asset) => matchesSearch(search, [asset.ticker, asset.name, asset.assetClass, asset.currency]));
+  const filteredDividends = overview.dividends.filter((dividend) => matchesSearch(search, [dividend.ticker, dividend.name, dividend.description, dividend.currency]));
+  const searchEmptyMessage = search.trim() ? "Nenhum registro corresponde a busca." : "Nenhum registro encontrado no periodo.";
   const selectedPriceAsset = bases.assets.find((asset) => asset.id === priceForm.assetId);
   const matchingOperationAsset = bases.assets.find((asset) => {
     const query = operationForm.ticker.trim().toUpperCase();
@@ -762,6 +807,7 @@ function InvestmentsConnectedView({ year }: { year: string }) {
   }
 
   const loadInvestments = useCallback(async (clearNotice = true) => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
     if (clearNotice) setNotice(null);
@@ -772,15 +818,17 @@ function InvestmentsConnectedView({ year }: { year: string }) {
       ]);
       const nextBases = await readJson(basesResponse) as InvestmentBases;
       const nextOverview = assertInvestmentOverview(await readJson(overviewResponse));
+      if (requestId !== requestIdRef.current) return;
       setBases(nextBases);
       setOverview(nextOverview);
       setOperationForm((current) => ({ ...current, assetId: current.assetId || nextBases.assets[0]?.id || "" }));
       setPriceForm((current) => ({ ...current, assetId: current.assetId || nextBases.assets[0]?.id || "", currency: (nextBases.assets.find((asset) => asset.id === (current.assetId || nextBases.assets[0]?.id))?.currency as "BRL" | "USD" | undefined) ?? current.currency }));
     } catch (nextError) {
+      if (requestId !== requestIdRef.current) return;
       setError(nextError instanceof Error ? nextError.message : "Nao foi possivel carregar ativos.");
       setOverview(emptyInvestmentOverview());
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
   }, [month, year]);
 
@@ -867,16 +915,22 @@ function InvestmentsConnectedView({ year }: { year: string }) {
 
   return (
     <>
+      <section className="costs-toolbar">
+        <select aria-label="Periodo de Ativos" value={month} onChange={(event) => setMonth(event.target.value)}>
+          <option value="all">Ano inteiro</option>
+          {monthOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+        </select>
+        <button onClick={() => void loadInvestments()}>Atualizar</button>
+      </section>
       {error && <p className="error-banner">{error}</p>}
       {notice && <p className="success-banner">{notice}</p>}
       <div className="asset-actions" aria-label="Acoes de ativos">
         <button className={showOperationForm ? "active" : ""} aria-expanded={showOperationForm} aria-controls="asset-operation-panel" onClick={toggleOperationForm}>Compra / Venda</button>
         <button className={showPriceForm ? "active" : ""} aria-expanded={showPriceForm} aria-controls="asset-price-panel" onClick={togglePriceForm}>Registrar preco</button>
         <button className={showExchangeForm ? "active" : ""} aria-expanded={showExchangeForm} aria-controls="asset-exchange-panel" onClick={toggleExchangeForm}>Atualizar cambio</button>
-        <button className="refresh-action" onClick={() => void loadInvestments()}>Atualizar dados</button>
       </div>
       {!loading && !error && !overview.hasAssets && <div className="empty-dashboard actionable"><strong>Nenhum ativo persistido encontrado.</strong><span>Comece cadastrando o ativo e a primeira compra no mesmo formulario.</span><button className="primary inline-action" onClick={startNewAssetFlow}>Incluir primeiro ativo</button></div>}
-      {overview.alerts.length > 0 && <p className="warning-banner">{investmentAlertsText(overview.alerts)}</p>}
+      {overview.alerts.length > 0 && <p className="warning-banner" role="status">{investmentAlertsText(overview.alerts)}</p>}
       <section className="kpi-grid">
         <Kpi title="Valor atual BRL" value={fmt(overviewBrl.currentValueCents / 100)} tone="green" />
         <Kpi title="Valor atual USD" value={fmtCurrency(overviewUsd.currentValueCents / 100, "USD")} tone="blue" />
@@ -936,12 +990,12 @@ function InvestmentsConnectedView({ year }: { year: string }) {
       </section>}
       <section className="asset-columns">
         <article className="panel">
-          <div className="chart-head"><h3>Carteira</h3><strong>{overview.positions.length} ativos</strong></div>
-          {overview.positions.length ? <DataTable headers={["Ticker", "Classe", "Moeda", "Qtd", "Preco medio", "Preco atual", "Valor atual", "Proventos"]} rows={overview.positions.map((asset) => [asset.ticker ?? asset.name, asset.assetClass, asset.currency, asset.quantityDecimal, asset.averagePriceDecimal ? fmtCurrency(Number(asset.averagePriceDecimal), asset.currency) : "-", asset.lastPriceDecimal ? fmtCurrency(Number(asset.lastPriceDecimal), asset.currency) : "-", asset.currentValueCents === null ? "Preco pendente" : fmtCurrency(asset.currentValueCents / 100, asset.currency), fmtCurrency(dividendTotalForPosition(overview, asset.assetId, asset.currency) / 100, asset.currency)])} /> : <EmptyState title="Carteira sem posicoes confirmadas." action="Use Compra / Venda para cadastrar uma operacao manual." />}
+          <div className="chart-head"><h3>Carteira</h3><strong>{filteredPositions.length} ativos</strong></div>
+          {loading ? <p className="empty-state" role="status">Carregando carteira...</p> : overview.positions.length ? <DataTable headers={["Ticker", "Classe", "Moeda", "Qtd", "Preco medio", "Preco atual", "Valor atual", "Proventos"]} rows={filteredPositions.map((asset) => [asset.ticker ?? asset.name, asset.assetClass, asset.currency, asset.quantityDecimal, asset.averagePriceDecimal ? fmtCurrency(Number(asset.averagePriceDecimal), asset.currency) : "-", asset.lastPriceDecimal ? fmtCurrency(Number(asset.lastPriceDecimal), asset.currency) : "-", asset.currentValueCents === null ? "Preco pendente" : fmtCurrency(asset.currentValueCents / 100, asset.currency), fmtCurrency(dividendTotalForPosition(overview, asset.assetId, asset.currency) / 100, asset.currency)])} emptyMessage={searchEmptyMessage} /> : <EmptyState title="Carteira sem posicoes confirmadas." action="Use Compra / Venda para cadastrar uma operacao manual." />}
         </article>
         <article className="panel">
-          <div className="chart-head"><h3>Proventos</h3><strong>{overview.dividends.length} registros</strong></div>
-          {overview.dividends.length ? <DataTable headers={["Data", "Ativo", "Moeda", "Valor", "Valor BRL"]} rows={overview.dividends.map((dividend) => [fmtDate(dividend.paymentDate), dividend.ticker ?? dividend.name ?? dividend.description, dividend.currency, fmtCurrency(dividend.amountCents / 100, dividend.currency), dividend.amountBrlCents === null ? "Cambio pendente" : fmt(dividend.amountBrlCents / 100)])} /> : <EmptyState title="Nenhum provento registrado." action="Dividendos confirmados aparecerao aqui quando existirem eventos financeiros." />}
+          <div className="chart-head"><h3>Proventos</h3><strong>{filteredDividends.length} registros</strong></div>
+          {loading ? <p className="empty-state" role="status">Carregando proventos...</p> : overview.dividends.length ? <DataTable headers={["Data", "Ativo", "Moeda", "Valor", "Valor BRL"]} rows={filteredDividends.map((dividend) => [fmtDate(dividend.paymentDate), dividend.ticker ?? dividend.name ?? dividend.description, dividend.currency, fmtCurrency(dividend.amountCents / 100, dividend.currency), dividend.amountBrlCents === null ? "Cambio pendente" : fmt(dividend.amountBrlCents / 100)])} emptyMessage={searchEmptyMessage} /> : <EmptyState title="Nenhum provento registrado." action="Dividendos confirmados aparecerao aqui quando existirem eventos financeiros." />}
         </article>
       </section>
     </>
@@ -978,8 +1032,8 @@ function MatrixTable({ rows, totals }: { rows: { label: string; values: number[]
   return <article className="table-panel"><table className="data-table matrix"><thead><tr><th>Despesa</th>{months.map((month) => <th key={month}>{month}</th>)}<th>Total</th></tr></thead><tbody>{rows.map((row) => <tr key={row.label}><th>{row.label}</th>{row.values.map((value, index) => <td key={months[index]} className={value > 3000 ? "hot" : ""}>{value ? fmt(value) : "-"}</td>)}<td>{fmt(row.values.reduce((a, b) => a + b, 0))}</td></tr>)}<tr className="total-row"><th>Total</th>{totals.map((value, index) => <td key={months[index]}>{value ? fmt(value) : "-"}</td>)}<td>{fmt(totals.reduce((a, b) => a + b, 0))}</td></tr></tbody></table></article>;
 }
 
-function DataTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
-  return <article className="table-panel"><table className="data-table"><thead><tr>{headers.map((head) => <th key={head}>{head}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={index}>{row.map((cell, cellIndex) => cellIndex ? <td key={`${index}-${cellIndex}`}>{cell}</td> : <th key={`${index}-${cellIndex}`}>{cell}</th>)}</tr>)}</tbody></table></article>;
+function DataTable({ headers, rows, emptyMessage = "Nenhum registro encontrado." }: { headers: string[]; rows: string[][]; emptyMessage?: string }) {
+  return <article className="table-panel"><table className="data-table"><thead><tr>{headers.map((head) => <th key={head}>{head}</th>)}</tr></thead><tbody>{rows.length ? rows.map((row) => <tr key={row.join("|")}>{row.map((cell, cellIndex) => cellIndex ? <td key={cellIndex}>{cell}</td> : <th key={cellIndex}>{cell}</th>)}</tr>) : <tr><td colSpan={headers.length}><span role="status">{emptyMessage}</span></td></tr>}</tbody></table></article>;
 }
 
 function LineChart({ values, labels = values.map((_, index) => String(index + 1)) }: { values: number[]; labels?: string[] }) {
